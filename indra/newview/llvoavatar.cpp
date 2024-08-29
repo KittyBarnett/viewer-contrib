@@ -8438,7 +8438,7 @@ bool LLVOAvatar::processFullyLoadedChange(bool loading)
 
 bool LLVOAvatar::isFullyLoaded() const
 {
-    return (mRenderUnloadedAvatar || mFullyLoaded);
+    return (mRenderUnloadedAvatar && !isSelf()) || mFullyLoaded;
 }
 
 bool LLVOAvatar::isTooComplex() const
