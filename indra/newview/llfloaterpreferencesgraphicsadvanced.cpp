@@ -45,12 +45,12 @@
 LLFloaterPreferenceGraphicsAdvanced::LLFloaterPreferenceGraphicsAdvanced(const LLSD& key)
     : LLFloater(key)
 {
-    mCommitCallbackRegistrar.add("Pref.RenderOptionUpdate",            boost::bind(&LLFloaterPreferenceGraphicsAdvanced::onRenderOptionEnable, this));
-    mCommitCallbackRegistrar.add("Pref.UpdateIndirectMaxNonImpostors", boost::bind(&LLFloaterPreferenceGraphicsAdvanced::updateMaxNonImpostors,this));
-    mCommitCallbackRegistrar.add("Pref.UpdateIndirectMaxComplexity",   boost::bind(&LLFloaterPreferenceGraphicsAdvanced::updateMaxComplexity,this));
+    mCommitCallbackRegistrar.add("Pref.RenderOptionUpdate",            { boost::bind(&LLFloaterPreferenceGraphicsAdvanced::onRenderOptionEnable, this) });
+    mCommitCallbackRegistrar.add("Pref.UpdateIndirectMaxNonImpostors", { boost::bind(&LLFloaterPreferenceGraphicsAdvanced::updateMaxNonImpostors,this) });
+    mCommitCallbackRegistrar.add("Pref.UpdateIndirectMaxComplexity",   { boost::bind(&LLFloaterPreferenceGraphicsAdvanced::updateMaxComplexity,this) });
 
-    mCommitCallbackRegistrar.add("Pref.Cancel", boost::bind(&LLFloaterPreferenceGraphicsAdvanced::onBtnCancel, this, _2));
-    mCommitCallbackRegistrar.add("Pref.OK",     boost::bind(&LLFloaterPreferenceGraphicsAdvanced::onBtnOK, this, _2));
+    mCommitCallbackRegistrar.add("Pref.Cancel", { boost::bind(&LLFloaterPreferenceGraphicsAdvanced::onBtnCancel, this, _2), cb_info::UNTRUSTED_BLOCK });
+    mCommitCallbackRegistrar.add("Pref.OK",     { boost::bind(&LLFloaterPreferenceGraphicsAdvanced::onBtnOK, this, _2), cb_info::UNTRUSTED_BLOCK });
 }
 
 LLFloaterPreferenceGraphicsAdvanced::~LLFloaterPreferenceGraphicsAdvanced()
@@ -63,17 +63,24 @@ LLFloaterPreferenceGraphicsAdvanced::~LLFloaterPreferenceGraphicsAdvanced()
 
 bool LLFloaterPreferenceGraphicsAdvanced::postBuild()
 {
-    // Don't do this on Mac as their braindead GL versioning
-    // sets this when 8x and 16x are indeed available
+    // Disable FSAA combo when shaders are not loaded
     //
-#if !LL_DARWIN
-    if (gGLManager.mIsIntel || gGLManager.mGLVersion < 3.f)
-    { //remove FSAA settings above "4x"
+    {
         LLComboBox* combo = getChild<LLComboBox>("fsaa");
-        combo->remove("8x");
-        combo->remove("16x");
+        if (!gFXAAProgram[0].isComplete())
+            combo->remove("FXAA");
+
+        if (!gSMAAEdgeDetectProgram[0].isComplete())
+            combo->remove("SMAA");
+
+        if (!gFXAAProgram[0].isComplete() && !gSMAAEdgeDetectProgram[0].isComplete())
+        {
+            combo->setEnabled(false);
+            getChild<LLComboBox>("fsaa quality")->setEnabled(false);
+        }
     }
 
+#if !LL_DARWIN
     LLCheckBoxCtrl *use_HiDPI = getChild<LLCheckBoxCtrl>("use HiDPI");
     use_HiDPI->setVisible(false);
 #endif
@@ -140,8 +147,6 @@ void LLFloaterPreferenceGraphicsAdvanced::onAdvancedAtmosphericsEnable()
 
 void LLFloaterPreferenceGraphicsAdvanced::refresh()
 {
-    getChild<LLUICtrl>("fsaa")->setValue((LLSD::Integer)  gSavedSettings.getU32("RenderFSAASamples"));
-
     // sliders and their text boxes
     //  mPostProcess = gSavedSettings.getS32("RenderGlowResolutionPow");
     // slider text boxes
@@ -249,8 +254,8 @@ void LLFloaterPreferenceGraphicsAdvanced::updateIndirectMaxNonImpostors(const LL
     if ((value != 0) && (value != gSavedSettings.getU32("IndirectMaxNonImpostors")))
     {
         gSavedSettings.setU32("IndirectMaxNonImpostors", value);
-        setMaxNonImpostorsText(value, getChild<LLTextBox>("IndirectMaxNonImpostorsText"));
     }
+    setMaxNonImpostorsText(value, getChild<LLTextBox>("IndirectMaxNonImpostorsText"));
 }
 
 void LLFloaterPreferenceGraphicsAdvanced::setMaxNonImpostorsText(U32 value, LLTextBox* text_box)
@@ -273,6 +278,7 @@ void LLFloaterPreferenceGraphicsAdvanced::disableUnavailableSettings()
     LLCheckBoxCtrl* ctrl_dof = getChild<LLCheckBoxCtrl>("UseDoF");
     LLSliderCtrl* sky = getChild<LLSliderCtrl>("SkyMeshDetail");
     LLTextBox* sky_text = getChild<LLTextBox>("SkyMeshDetailText");
+    LLSliderCtrl* cas_slider = getChild<LLSliderCtrl>("RenderSharpness");
 
     // disabled windlight
     if (!LLFeatureManager::getInstance()->isFeatureAvailable("WindLightUseAtmosShaders"))
@@ -320,6 +326,19 @@ void LLFloaterPreferenceGraphicsAdvanced::disableUnavailableSettings()
         ctrl_shadows->setValue(0);
         shadows_text->setEnabled(false);
     }
+
+    // Vintage mode
+    static LLCachedControl<bool> is_not_vintage(gSavedSettings, "RenderDisableVintageMode");
+    LLSliderCtrl*         tonemapMix    = getChild<LLSliderCtrl>("TonemapMix");
+    LLComboBox*           tonemapSelect = getChild<LLComboBox>("TonemapType");
+    LLTextBox*            tonemapLabel  = getChild<LLTextBox>("TonemapTypeText");
+    LLSliderCtrl*         exposureSlider = getChild<LLSliderCtrl>("RenderExposure");
+
+    tonemapSelect->setEnabled(is_not_vintage);
+    tonemapLabel->setEnabled(is_not_vintage);
+    tonemapMix->setEnabled(is_not_vintage);
+    exposureSlider->setEnabled(is_not_vintage);
+    cas_slider->setEnabled(is_not_vintage);
 }
 
 void LLFloaterPreferenceGraphicsAdvanced::refreshEnabledState()

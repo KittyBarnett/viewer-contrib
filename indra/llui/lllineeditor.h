@@ -40,6 +40,7 @@
 #include "llframetimer.h"
 
 #include "lleditmenuhandler.h"
+#include "llfontvertexbuffer.h"
 #include "llspellcheckmenuhandler.h"
 #include "lluictrl.h"
 #include "lluiimage.h"
@@ -201,6 +202,7 @@ public:
     void            setLabel(const LLStringExplicit &new_label) { mLabel = new_label; }
     const std::string&  getLabel()  { return mLabel.getString(); }
 
+    void            setDefaultText() { setText(mDefaultText); }
     void            setText(const LLStringExplicit &new_text);
 
     const std::string& getText() const override { return mText.getString(); }
@@ -305,8 +307,6 @@ public:
     S32             calcCursorPos(S32 mouse_x);
     bool            handleSpecialKey(KEY key, MASK mask);
     bool            handleSelectionKey(KEY key, MASK mask);
-    bool            handleControlKey(KEY key, MASK mask);
-    S32             handleCommitKey(KEY key, MASK mask);
     void            updateTextPadding();
 
     // Draw the background image depending on enabled/focused state.
@@ -344,6 +344,11 @@ protected:
 
     LLViewBorder* mBorder;
     const LLFontGL* mGLFont;
+    LLFontVertexBuffer mFontBufferPreSelection;
+    LLFontVertexBuffer mFontBufferSelection;
+    LLFontVertexBuffer mFontBufferPostSelection;
+    LLFontVertexBuffer mFontBufferLabel;
+    std::string mDefaultText;
     S32         mMaxLengthBytes;            // Max length of the UTF8 string in bytes
     S32         mMaxLengthChars;            // Maximum number of characters in the string
     S32         mCursorPos;                 // I-beam is just after the mCursorPos-th character.
@@ -439,7 +444,7 @@ private:
             mText = ed->getText();
         }
 
-        void doRollback( LLLineEditor* ed )
+        void doRollback(LLLineEditor* ed) const
         {
             ed->mCursorPos = mCursorPos;
             ed->mScrollHPos = mScrollHPos;
@@ -450,7 +455,7 @@ private:
             ed->mPrevText = mText;
         }
 
-        std::string getText()   { return mText; }
+        std::string getText() const { return mText; }
 
     private:
         std::string mText;

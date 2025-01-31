@@ -38,7 +38,6 @@
 #include "llregionhandle.h"
 #include "llsurface.h"
 #include "message.h"
-//#include "vmath.h"
 #include "v3math.h"
 #include "v4math.h"
 
@@ -345,11 +344,10 @@ void LLViewerRegionImpl::requestBaseCapabilitiesCoro(U64 regionHandle)
 
         impl = regionp->getRegionImplNC();
 
-        ++(impl->mSeedCapAttempts);
-
         if (!result.isMap() || result.has("error"))
         {
             LL_WARNS("AppInit", "Capabilities") << "Malformed response" << LL_ENDL;
+            ++(impl->mSeedCapAttempts);
             // setup for retry.
             continue;
         }
@@ -359,6 +357,7 @@ void LLViewerRegionImpl::requestBaseCapabilitiesCoro(U64 regionHandle)
         if (!status)
         {
             LL_WARNS("AppInit", "Capabilities") << "HttpStatus error " << LL_ENDL;
+            ++(impl->mSeedCapAttempts);
             // setup for retry.
             continue;
         }
@@ -369,6 +368,7 @@ void LLViewerRegionImpl::requestBaseCapabilitiesCoro(U64 regionHandle)
         if (id != impl->mHttpResponderID) // region is no longer referring to this request
         {
             LL_WARNS("AppInit", "Capabilities") << "Received results for a stale capabilities request!" << LL_ENDL;
+            ++(impl->mSeedCapAttempts);
             // setup for retry.
             continue;
         }
@@ -1302,12 +1302,15 @@ void LLViewerRegion::updateReflectionProbes(bool full_update)
                 mReflectionMaps[idx] = gPipeline.mReflectionMapManager.addProbe();
             }
 
-            LLVector3 probe_origin = LLVector3(x, y, llmax(water_height, mImpl->mLandp->resolveHeightRegion(x, y)));
-            probe_origin.mV[2] += hover_height;
-            probe_origin += origin;
+            if (mReflectionMaps[idx])
+            {
+                LLVector3 probe_origin = LLVector3(x, y, llmax(water_height, mImpl->mLandp->resolveHeightRegion(x, y)));
+                probe_origin.mV[2] += hover_height;
+                probe_origin += origin;
 
-            mReflectionMaps[idx]->mOrigin.load3(probe_origin.mV);
-            mReflectionMaps[idx]->mRadius = probe_radius;
+                mReflectionMaps[idx]->mOrigin.load3(probe_origin.mV);
+                mReflectionMaps[idx]->mRadius = probe_radius;
+            }
         }
     }
 }
@@ -2488,7 +2491,16 @@ void LLViewerRegion::setSimulatorFeatures(const LLSD& sim_features)
             if (features.has("GLTFEnabled"))
             {
                 bool enabled = features["GLTFEnabled"];
-                gSavedSettings.setBOOL("GLTFEnabled", enabled);
+
+                // call setShaders the first time GLTFEnabled is received as true (causes GLTF specific shaders to be loaded)
+                if (enabled != gSavedSettings.getBOOL("GLTFEnabled"))
+                {
+                    gSavedSettings.setBOOL("GLTFEnabled", enabled);
+                    if (enabled)
+                    {
+                        LLViewerShaderMgr::instance()->setShaders();
+                    }
+                }
             }
             else
             {
@@ -3146,7 +3158,7 @@ void LLViewerRegion::unpackRegionHandshake()
         std::string cap = getCapability("ModifyRegion"); // needed for queueQuery
         if (cap.empty())
         {
-            LLFloaterRegionInfo::sRefreshFromRegion(this);
+            LLFloaterRegionInfo::refreshFromRegion(this);
         }
         else
         {
@@ -3158,7 +3170,7 @@ void LLViewerRegion::unpackRegionHandshake()
                 LLVLComposition* compp = region->getComposition();
                 if (!compp) { return; }
                 compp->apply(composition_changes);
-                LLFloaterRegionInfo::sRefreshFromRegion(region);
+                LLFloaterRegionInfo::refreshFromRegion(region);
             });
         }
     }
@@ -3211,6 +3223,7 @@ void LLViewerRegionImpl::buildCapabilityNames(LLSD& capabilityNames)
     capabilityNames.append("ChatSessionRequest");
     capabilityNames.append("CopyInventoryFromNotecard");
     capabilityNames.append("CreateInventoryCategory");
+    capabilityNames.append("CreateLandmarkForPosition");
     capabilityNames.append("DeclineFriendship");
     capabilityNames.append("DeclineGroupInvite"); // ReadOfflineMsgs recieved messages only!!!
     capabilityNames.append("DispatchRegionInfo");
@@ -3226,6 +3239,7 @@ void LLViewerRegionImpl::buildCapabilityNames(LLSD& capabilityNames)
     capabilityNames.append("FetchInventory2");
     capabilityNames.append("FetchInventoryDescendents2");
     capabilityNames.append("IncrementCOFVersion");
+    capabilityNames.append("RequestTaskInventory");
     AISAPI::getCapNames(capabilityNames);
 
     capabilityNames.append("InterestList");

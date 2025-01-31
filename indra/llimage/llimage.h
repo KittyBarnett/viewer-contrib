@@ -27,10 +27,11 @@
 #ifndef LL_LLIMAGE_H
 #define LL_LLIMAGE_H
 
-#include "lluuid.h"
-#include "llstring.h"
+#include "llmutex.h"
 #include "llpointer.h"
+#include "llstring.h"
 #include "lltrace.h"
+#include "lluuid.h"
 
 constexpr S32 MIN_IMAGE_MIP =  2; // 4x4, only used for expand/contract power of 2
 constexpr S32 MAX_IMAGE_MIP = 12; // 4096x4096
@@ -179,7 +180,7 @@ private:
 
 public:
     template<bool SHARED>
-    class DataLock : LLSharedMutexLockTemplate<SHARED>
+    class DataLock : public LLSharedMutexLockTemplate<SHARED>
     {
     public:
         DataLock(const LLImageBase* image)

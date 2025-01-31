@@ -26,7 +26,7 @@
 
 #include "llviewerprecompiledheaders.h"
 // include this to get winsock2 because openssl attempts to include winsock1
-#include "llwin32headerslean.h"
+#include "llwin32headers.h"
 #include <openssl/x509_vfy.h>
 #include <openssl/ssl.h>
 #include "llsecapi.h"
@@ -218,7 +218,7 @@ LLXMLRPCTransaction::Impl::Impl
     mCertStore = gSavedSettings.getString("CertStore");
 
     httpOpts->setSSLVerifyPeer(vefifySSLCert);
-    httpOpts->setSSLVerifyHost(vefifySSLCert ? 2 : 0);
+    httpOpts->setSSLVerifyHost(vefifySSLCert);
 
     // LLRefCounted starts with a 1 ref, so don't add a ref in the smart pointer
     httpHeaders = LLCore::HttpHeaders::ptr_t(new LLCore::HttpHeaders());
@@ -313,6 +313,8 @@ bool LLXMLRPCTransaction::Impl::process()
     if (mHasResponse && !mResponseParsed)
     {
         LLXMLNodePtr root;
+        bool strip_escaped_strings = LLXMLNode::sStripEscapedStrings;
+        LLXMLNode::sStripEscapedStrings = false;
         if (!LLXMLNode::parseBuffer(mResponseText.data(), mResponseText.size(),
                                     root, nullptr))
         {
@@ -329,6 +331,7 @@ bool LLXMLRPCTransaction::Impl::process()
             LL_WARNS() << "XMLRPC response parsing failed; request URI: "
                        << mURI << LL_ENDL;
         }
+        LLXMLNode::sStripEscapedStrings = strip_escaped_strings;
         mResponseParsed = true;
     }
 

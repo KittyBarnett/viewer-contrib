@@ -73,6 +73,8 @@ public:
     void startRenamingSelectedItem();
 
     LLFolderView* getRootFolder() const { return mFolders; }
+    LLInventoryFilter& getFilter() { return mInventoryViewModel.getFilter(); }
+    const LLInventoryFilter& getFilter() const { return mInventoryViewModel.getFilter(); }
 
     virtual void draw();
     virtual void deleteAllChildren();
@@ -82,6 +84,8 @@ public:
     /*virtual*/ void onFocusReceived();
 
     static void idle(void* user_data);
+
+    bool hasInventory(){ return mHaveInventory; };
 
 protected:
     void reset();

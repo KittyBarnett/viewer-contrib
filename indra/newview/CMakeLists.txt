@@ -28,11 +28,14 @@ include(LLKDU)
 include(LLPhysicsExtensions)
 include(LLPrimitive)
 include(LLWindow)
+include(SDL2)
 include(NDOF)
+include(NFDE)
 include(NVAPI)
 include(OPENAL)
 include(OpenGL)
 include(OpenSSL)
+include(OpenXR)
 include(PNG)
 include(TemplateCheck)
 include(TinyEXR)
@@ -45,6 +48,7 @@ include(VisualLeakDetector)
 include(VulkanGltf)
 include(ZLIBNG)
 include(LLPrimitive)
+include(Lualibs)
 
 if (NOT HAVOK_TPV)
    # When using HAVOK_TPV, the library is precompiled, so no need for this
@@ -91,6 +95,7 @@ set(viewer_SOURCE_FILES
     llagentwearables.cpp
     llanimstatelabels.cpp
     llappcorehttp.cpp
+    llappearancelistener.cpp
     llappearancemgr.cpp
     llappviewer.cpp
     llappviewerlistener.cpp
@@ -244,6 +249,8 @@ set(viewer_SOURCE_FILES
     llfloaterlandholdings.cpp
     llfloaterlinkreplace.cpp
     llfloaterloadprefpreset.cpp
+    llfloaterluadebug.cpp
+    llfloaterluascripts.cpp
     llfloatermarketplacelistings.cpp
     llfloatermap.cpp
     llfloatermediasettings.cpp
@@ -266,7 +273,6 @@ set(viewer_SOURCE_FILES
     llfloaterpay.cpp
     llfloaterperformance.cpp
     llfloaterperms.cpp
-    llfloaterpostprocess.cpp
     llfloaterprofile.cpp
     llfloaterpreference.cpp
     llfloaterpreferencesgraphicsadvanced.cpp
@@ -312,6 +318,7 @@ set(viewer_SOURCE_FILES
     llfollowcam.cpp
     llfriendcard.cpp
     llflyoutcombobtn.cpp
+    llflycam.cpp
     llgesturelistener.cpp
     llgesturemgr.cpp
     llgiveinventory.cpp
@@ -358,6 +365,7 @@ set(viewer_SOURCE_FILES
     llinventorygallerymenu.cpp
     llinventoryicon.cpp
     llinventoryitemslist.cpp
+    llinventorylistener.cpp
     llinventorylistitem.cpp
     llinventorymodel.cpp
     llinventorymodelbackgroundfetch.cpp
@@ -377,6 +385,7 @@ set(viewer_SOURCE_FILES
     lllogchat.cpp
     llloginhandler.cpp
     lllogininstance.cpp
+    llluamanager.cpp
     llmachineid.cpp
     llmanip.cpp
     llmaniprotate.cpp
@@ -726,6 +735,11 @@ set(viewer_SOURCE_FILES
     llxmlrpctransaction.cpp
     noise.cpp
     pipeline.cpp
+    rlvactions.cpp
+    rlvcommon.cpp
+    rlvfloaters.cpp
+    rlvhelper.cpp
+    rlvhandler.cpp
     )
 
 set(VIEWER_BINARY_NAME "secondlife-bin" CACHE STRING
@@ -758,6 +772,7 @@ set(viewer_HEADER_FILES
     llanimstatelabels.h
     llappcorehttp.h
     llappearance.h
+    llappearancelistener.h
     llappearancemgr.h
     llappviewer.h
     llappviewerlistener.h
@@ -914,6 +929,8 @@ set(viewer_HEADER_FILES
     llfloaterlandholdings.h
     llfloaterlinkreplace.h
     llfloaterloadprefpreset.h
+    llfloaterluadebug.h
+    llfloaterluascripts.h
     llfloatermap.h
     llfloatermarketplacelistings.h
     llfloatermediasettings.h
@@ -936,7 +953,6 @@ set(viewer_HEADER_FILES
     llfloaterpay.h
     llfloaterperformance.h
     llfloaterperms.h
-    llfloaterpostprocess.h
     llfloaterprofile.h
     llfloaterpreference.h
     llfloaterpreferencesgraphicsadvanced.h
@@ -982,6 +998,7 @@ set(viewer_HEADER_FILES
     llfollowcam.h
     llfriendcard.h
     llflyoutcombobtn.h
+    llflycam.h
     llgesturelistener.h
     llgesturemgr.h
     llgiveinventory.h
@@ -1026,6 +1043,7 @@ set(viewer_HEADER_FILES
     llinventorygallerymenu.h
     llinventoryicon.h
     llinventoryitemslist.h
+    llinventorylistener.h
     llinventorylistitem.h
     llinventorymodel.h
     llinventorymodelbackgroundfetch.h
@@ -1045,6 +1063,7 @@ set(viewer_HEADER_FILES
     lllogchat.h
     llloginhandler.h
     lllogininstance.h
+    llluamanager.h
     llmachineid.h
     llmanip.h
     llmaniprotate.h
@@ -1386,6 +1405,12 @@ set(viewer_HEADER_FILES
     llxmlrpctransaction.h
     noise.h
     pipeline.h
+    rlvdefines.h
+    rlvactions.h
+    rlvcommon.h
+    rlvfloaters.h
+    rlvhelper.h
+    rlvhandler.h
     roles_constants.h
     VertexCache.h
     VorbisFramework.h
@@ -1414,11 +1439,24 @@ if (DARWIN)
   LIST(APPEND viewer_SOURCE_FILES llfilepicker_mac.mm)
   LIST(APPEND viewer_HEADER_FILES llfilepicker_mac.h)
 
+  set_source_files_properties(
+    llappviewermacosx-objc.mm
+    PROPERTIES
+    SKIP_PRECOMPILE_HEADERS TRUE
+  )
+
+  set_source_files_properties(
+    llfilepicker_mac.mm
+    PROPERTIES
+    SKIP_PRECOMPILE_HEADERS TRUE
+  )
+
   # This should be compiled with the viewer.
   LIST(APPEND viewer_SOURCE_FILES llappdelegate-objc.mm)
   set_source_files_properties(
     llappdelegate-objc.mm
     PROPERTIES
+    SKIP_PRECOMPILE_HEADERS TRUE
     COMPILE_DEFINITIONS "${VIEWER_CHANNEL_VERSION_DEFINES}"
     # BugsplatMac is a module, imported with @import. That language feature
     # demands these -f switches.
@@ -1453,7 +1491,6 @@ if (LINUX)
       PROPERTIES
       COMPILE_DEFINITIONS "${VIEWER_CHANNEL_VERSION_DEFINES}"
       )
-    LIST(APPEND viewer_SOURCE_FILES llappviewerlinux_api_dbus.cpp)
     SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--as-needed")
 
 endif (LINUX)
@@ -1615,6 +1652,13 @@ set_source_files_properties(${viewer_SHADER_FILES}
                             PROPERTIES HEADER_FILE_ONLY TRUE)
 list(APPEND viewer_SOURCE_FILES ${viewer_SHADER_FILES})
 
+# Add lua script sources
+file(GLOB_RECURSE viewer_LUA_SCRIPT_FILES LIST_DIRECTORIES FALSE
+    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/lua/*.lua)
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/scripts/lua PREFIX "LUA Scripts" FILES ${viewer_LUA_SCRIPT_FILES})
+set_source_files_properties(${viewer_LUA_SCRIPT_FILES} 
+                            PROPERTIES HEADER_FILE_ONLY TRUE)
+list(APPEND viewer_SOURCE_FILES ${viewer_LUA_SCRIPT_FILES})
 
 set(viewer_APPSETTINGS_FILES
     app_settings/anim.ini
@@ -1636,11 +1680,13 @@ set(viewer_APPSETTINGS_FILES
     app_settings/toolbars.xml
     app_settings/trees.xml
     app_settings/viewerart.xml
+    app_settings/gamecontrollerdb.txt
     ${CMAKE_SOURCE_DIR}/../etc/message.xml
     ${CMAKE_SOURCE_DIR}/../scripts/messages/message_template.msg
     packages-info.txt
     featuretable.txt
     featuretable_mac.txt
+    featuretable_linux.txt
     )
 
 source_group("App Settings" FILES ${viewer_APPSETTINGS_FILES})
@@ -1702,6 +1748,10 @@ list(APPEND EVENT_HOST_SCRIPTS ${EVENT_HOST_SCRIPT_GLOB_LIST})
 set(PACKAGE ON CACHE BOOL
     "Add a package target that builds an installer package.")
 
+if(USE_PRECOMPILED_HEADERS)
+  target_precompile_headers( ${VIEWER_BINARY_NAME} PRIVATE llviewerprecompiledheaders.h )
+endif(USE_PRECOMPILED_HEADERS)
+
 if (WINDOWS)
     set_target_properties(${VIEWER_BINARY_NAME}
         PROPERTIES
@@ -1711,10 +1761,6 @@ if (WINDOWS)
         LINK_FLAGS_RELEASE "/FORCE:MULTIPLE /MAP\"secondlife-bin.MAP\" /OPT:REF /LARGEADDRESSAWARE"
         )
     target_compile_options(${VIEWER_BINARY_NAME} PRIVATE /bigobj)
-
-    if(USE_PRECOMPILED_HEADERS)
-       target_precompile_headers( ${VIEWER_BINARY_NAME} PRIVATE llviewerprecompiledheaders.h )
-    endif(USE_PRECOMPILED_HEADERS)
 
     # If adding a file to viewer_manifest.py in the WindowsManifest.construct() method, be sure to add the dependency
     # here.
@@ -1729,7 +1775,7 @@ if (WINDOWS)
     # And of course it's straightforward to read a text file in Python.
 
     set(COPY_INPUT_DEPENDENCIES
-      # The following commented dependencies are determined at variably at build time. Can't do this here.
+      # The following commented dependencies are determined variably at build time. Can't do this here.
       ${CMAKE_SOURCE_DIR}/../etc/message.xml
       ${CMAKE_SOURCE_DIR}/../scripts/messages/message_template.msg
       ${SHARED_LIB_STAGING_DIR}/openjp2.dll
@@ -1798,6 +1844,47 @@ if (WINDOWS)
 
     add_dependencies(${VIEWER_BINARY_NAME} stage_third_party_libs llcommon llwebrtc copy_w_viewer_manifest)
 
+    # Useful for remote debugging or profiling if set to target a shared drive. for example, brad sets it to "dist/secondlife" to deploy under
+    # the build tree (and then I share that directory) or "f:/dist/secondlife" to deploy to a network mounted drive (although this can be slow).
+    # this will also create an "unpacked" tarball at build-<platform>/newview/unpacked_<platform>_7_1_11_<build num>.tar
+    set(LOCAL_DIST_DIR "" CACHE PATH "Path for 'local' unpacked copy of viewer distribution to be deployed to.")
+    set(product SecondLife-${ARCH}-${VIEWER_SHORT_VERSION}.${VIEWER_VERSION_REVISION})
+    if(IS_DIRECTORY ${LOCAL_DIST_DIR})
+        add_custom_command(
+            OUTPUT  ${LOCAL_DIST_DIR}/.${product}.copy_touched
+            COMMAND ${PYTHON_EXECUTABLE}
+            ARGS
+            ${CMAKE_CURRENT_SOURCE_DIR}/viewer_manifest.py
+            "--actions=\"copy package unpacked\""
+            --arch=${ARCH}
+            --artwork=${ARTWORK_DIR}
+            "--bugsplat=${BUGSPLAT_DB}"
+            "--openal=${USE_OPENAL}"
+            "--tracy=${USE_TRACY}"
+            --build=${CMAKE_CURRENT_BINARY_DIR}
+            --buildtype=$<IF:$<BOOL:${LL_GENERATOR_IS_MULTI_CONFIG}>,$<CONFIG>,${CMAKE_BUILD_TYPE}>
+            "--channel=${VIEWER_CHANNEL}"
+            --configuration=$<CONFIG>
+            --dest=${LOCAL_DIST_DIR}
+            --grid=${GRID}
+            --source=${CMAKE_CURRENT_SOURCE_DIR}
+            --versionfile=${CMAKE_CURRENT_BINARY_DIR}/viewer_version.txt
+            --touch=${LOCAL_DIST_DIR}/.${product}.copy_touched
+            DEPENDS
+            ${CMAKE_CURRENT_SOURCE_DIR}/viewer_manifest.py
+            stage_third_party_libs
+            llwebrtc
+            ${CMAKE_CURRENT_BINARY_DIR}/viewer_version.txt
+            ${COPY_INPUT_DEPENDENCIES}
+            ${VIEWER_BINARY_NAME}
+            COMMENT "Performing viewer_manifest local dist copy"
+            )
+
+        add_custom_target(copy_local_dist_viewer_manifest ALL DEPENDS ${LOCAL_DIST_DIR}/.${product}.copy_touched)
+    elseif (NOT LOCAL_DIST_DIR STREQUAL "")
+        message(FATAL_ERROR "LOCAL_DIST_DIR ${LOCAL_DIST_DIR} specified but is not valid target directory to copy viewer distribution into.  Please create the directory and try again")
+    endif ()  # IS_DIRECTORY ${LOCAL_DIST_DIR}
+
     if (EXISTS ${CMAKE_SOURCE_DIR}/copy_win_scripts)
       add_dependencies(${VIEWER_BINARY_NAME} copy_win_scripts)
     endif (EXISTS ${CMAKE_SOURCE_DIR}/copy_win_scripts)
@@ -1814,20 +1901,6 @@ if (WINDOWS)
     endif (NOT UNATTENDED)
 
     if (PACKAGE)
-      add_custom_command(
-        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/event_host.tar.xz
-        COMMAND ${PYTHON_EXECUTABLE}
-        ARGS
-          ${CMAKE_CURRENT_SOURCE_DIR}/event_host_manifest.py
-          ${CMAKE_CURRENT_SOURCE_DIR}/..
-          ${CMAKE_CURRENT_BINARY_DIR}
-          ${CMAKE_CFG_INTDIR}
-        DEPENDS
-          lleventhost
-          ${EVENT_HOST_SCRIPTS}
-          ${CMAKE_CURRENT_SOURCE_DIR}/event_host_manifest.py
-        )
-
       add_custom_command(
         OUTPUT ${CMAKE_CFG_INTDIR}/touched.bat
         COMMAND ${PYTHON_EXECUTABLE}
@@ -1857,9 +1930,6 @@ if (WINDOWS)
       add_custom_target(llpackage ALL DEPENDS
               ${CMAKE_CFG_INTDIR}/touched.bat
         )
-        # temporarily disable packaging of event_host until hg subrepos get
-        # sorted out on the parabuild cluster...
-        #${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/event_host.tar.xz)
 
     endif (PACKAGE)
 elseif (DARWIN)
@@ -1871,7 +1941,7 @@ else (WINDOWS)
         # Linux
     set_target_properties(${VIEWER_BINARY_NAME}
         PROPERTIES
-        LINK_FLAGS_RELEASE "${LINK_FLAGS_RELEASE} -Wl,--Map=${VIEWER_BINARY_NAME}.MAP"
+        LINK_FLAGS_RELEASE "${LINK_FLAGS_RELEASE} -no-pie -Wl,--Map=${VIEWER_BINARY_NAME}.MAP"
         )
 endif (WINDOWS)
 
@@ -1921,13 +1991,16 @@ target_link_libraries(${VIEWER_BINARY_NAME}
         llcommon
         llmeshoptimizer
         llwebrtc
-        ll::ndof
         lllogin
         llprimitive
         llappearance
         ${LLPHYSICSEXTENSIONS_LIBRARIES}
         ll::bugsplat
+        ll::lualibs
+        ll::ndof
         ll::tracy
+        ll::openxr
+        ll::nfde
         )
 
 if( TARGET ll::intel_memops )
@@ -2244,6 +2317,7 @@ if (LL_TESTS)
           lllogin
           llplugin
           llappearance
+          ll::SDL2
     )
 
   set_source_files_properties(
@@ -2295,11 +2369,17 @@ if (LL_TESTS)
           lllogin
           llprimitive
           lllogin
+          ll::SDL2
           )
 
   LL_ADD_INTEGRATION_TEST(cppfeatures
     ""
     "${test_libs}"
+    )
+
+  LL_ADD_INTEGRATION_TEST(llluamanager
+    "llluamanager.cpp"
+    "${test_libs};ll::lualibs"
     )
 
   LL_ADD_INTEGRATION_TEST(llsechandler_basic
@@ -2356,4 +2436,3 @@ if (LL_TESTS)
 endif (LL_TESTS)
 
 check_message_template(${VIEWER_BINARY_NAME})
-

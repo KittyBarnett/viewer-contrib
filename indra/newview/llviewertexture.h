@@ -148,8 +148,6 @@ public:
 
     LLFrameTimer* getLastReferencedTimer() { return &mLastReferencedTimer; }
 
-    S32 getFullWidth() const { return mFullWidth; }
-    S32 getFullHeight() const { return mFullHeight; }
     /*virtual*/ void setKnownDrawSize(S32 width, S32 height);
 
     virtual void addFace(U32 channel, LLFace* facep) ;
@@ -220,6 +218,7 @@ public:
     static S32 sAuxCount;
     static LLFrameTimer sEvaluationTimer;
     static F32 sDesiredDiscardBias;
+    static U32 sBiasTexturesUpdated;
     static S32 sMaxSculptRez ;
     static U32 sMinLargeImageSize ;
     static U32 sMaxSmallImageSize ;
@@ -410,6 +409,8 @@ public:
 
     /*virtual*/bool  isActiveFetching() override; //is actively in fetching by the fetching pipeline.
 
+    virtual bool scaleDown() { return false; };
+
     bool mCreatePending = false;    // if true, this is in gTextureList.mCreateTextureList
     mutable bool mDownScalePending = false; // if true, this is in gTextureList.mDownScaleQueue
 
@@ -420,6 +421,8 @@ protected:
 private:
     void init(bool firstinit) ;
     void cleanup() ;
+
+    bool processFetchResults(S32& desired_discard, S32 current_discard, S32 fetch_discard, F32 decode_priority);
 
     void saveRawImage() ;
 
@@ -507,6 +510,7 @@ public:
     static LLPointer<LLViewerFetchedTexture> sDefaultImagep; // "Default" texture for error cases, the only case of fetched texture which is generated in local.
     static LLPointer<LLViewerFetchedTexture> sFlatNormalImagep; // Flat normal map denoting no bumpiness on a surface
     static LLPointer<LLViewerFetchedTexture> sDefaultIrradiancePBRp; // PBR: irradiance
+    static LLPointer<LLViewerFetchedTexture> sDefaultParticleImagep; // Default particle texture
 
     // not sure why, but something is iffy about the loading of this particular texture, use the accessor instead of accessing directly
     static LLPointer<LLViewerFetchedTexture> sSmokeImagep; // Old "Default" translucent texture
@@ -526,12 +530,12 @@ public:
     LLViewerLODTexture(const LLUUID& id, FTType f_type, const LLHost& host = LLHost(), bool usemipmaps = true);
     LLViewerLODTexture(const std::string& url, FTType f_type, const LLUUID& id, bool usemipmaps = true);
 
-    /*virtual*/ S8 getType() const;
+    S8 getType() const override;
     // Process image stats to determine priority/quality requirements.
-    /*virtual*/ void processTextureStats();
+    void processTextureStats() override;
     bool isUpdateFrozen() ;
 
-    bool scaleDown();
+    bool scaleDown() override;
 
 private:
     void init(bool firstinit) ;

@@ -29,12 +29,18 @@ else()
   set( USE_AUTOBUILD_3P ON )
 endif()
 
+if (NOT DEFINED CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 20)
+endif()
+message(STATUS "Selected C++ Standard: '${CMAKE_CXX_STANDARD}'")
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 include(Variables)
 include(BuildVersion)
 
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
-      "Build type.  One of: Debug Release RelWithDebInfo" FORCE)
+      "Build type.  One of: Release RelWithDebInfo" FORCE)
 endif (NOT CMAKE_BUILD_TYPE)
 
 add_subdirectory(cmake)
@@ -82,17 +88,7 @@ if (ENABLE_MEDIA_PLUGINS)
 add_subdirectory(${LIBS_OPEN_PREFIX}media_plugins)
 endif (ENABLE_MEDIA_PLUGINS)
 
-if (LINUX)
-  if (INSTALL_PROPRIETARY)
-      include(LLAppearanceUtility)
-      add_subdirectory(${LLAPPEARANCEUTILITY_SRC_DIR} ${LLAPPEARANCEUTILITY_BIN_DIR})
-  endif (INSTALL_PROPRIETARY)
-elseif (WINDOWS)
-  # cmake EXISTS requires an absolute path, see indra/cmake/Variables.cmake
-  if (EXISTS ${VIEWER_DIR}win_setup)
-    add_subdirectory(${VIEWER_DIR}win_setup)
-  endif (EXISTS ${VIEWER_DIR}win_setup)
-endif (LINUX)
+add_subdirectory(${VIEWER_PREFIX}llappearanceutility)
 
 if (WINDOWS)
     # cmake EXISTS requires an absolute path, see indra/cmake/Variables.cmake

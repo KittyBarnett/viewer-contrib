@@ -15,7 +15,6 @@ set(cmake_SOURCE_FILES
         CEFPlugin.cmake
         CEFPlugin.cmake
         CMakeCopyIfDifferent.cmake
-        ConfigurePkgConfig.cmake
         CURL.cmake
         Copy3rdPartyLibs.cmake
         DBusGlib.cmake
@@ -26,6 +25,7 @@ set(cmake_SOURCE_FILES
         FreeType.cmake
         GLEXT.cmake
         GLH.cmake
+        GLM.cmake
         Havok.cmake
         Hunspell.cmake
         LLAddBuildTest.cmake
@@ -40,8 +40,10 @@ set(cmake_SOURCE_FILES
         LLTestCommand.cmake
         LLWindow.cmake
         Linking.cmake
+        Lualibs.cmake
         Meshoptimizer.cmake
         NDOF.cmake
+        NFDE.cmake
         OPENAL.cmake
         OpenGL.cmake
         OpenJPEG.cmake
@@ -51,9 +53,11 @@ set(cmake_SOURCE_FILES
         Prebuilt.cmake
         PulseAudio.cmake
         Python.cmake
+        SDL2.cmake
         TemplateCheck.cmake
         TinyEXR.cmake
         TinyGLTF.cmake
+        Tracy.cmake
         Tut.cmake
         UI.cmake
         UnixInstall.cmake

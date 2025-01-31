@@ -1360,7 +1360,8 @@ void LLPanelGroupMembersSubTab::activate()
     {
         if (!gdatap || !gdatap->isMemberDataComplete())
         {
-            const U32 page_size = 50;
+            static LLCachedControl<bool> enable_pagination(gSavedSettings, "UseGroupMemberPagination", false);
+            const U32 page_size = enable_pagination() ? 50 : 0;
             std::string sort_column_name = mMembersList->getSortColumnName();
             bool sort_descending = !mMembersList->getSortAscending();
             LLGroupMgr::getInstance()->sendCapGroupMembersRequest(mGroupID, page_size, 0, sort_column_name, sort_descending);
@@ -1936,7 +1937,9 @@ LLPanelGroupRolesSubTab::LLPanelGroupRolesSubTab()
   : LLPanelGroupSubTab(),
     mRolesList(NULL),
     mAssignedMembersList(NULL),
+    mActionDescription(NULL),
     mAllowedActionsList(NULL),
+    mMembersNotLoadedLbl(NULL),
     mRoleName(NULL),
     mRoleTitle(NULL),
     mRoleDescription(NULL),
@@ -1968,6 +1971,7 @@ bool LLPanelGroupRolesSubTab::postBuildSubTab(LLView* root)
     mAssignedMembersList = parent->getChild<LLNameListCtrl>("role_assigned_members");
     mAllowedActionsList = parent->getChild<LLScrollListCtrl>("role_allowed_actions");
     mActionDescription  = parent->getChild<LLTextEditor>("role_action_description");
+    mMembersNotLoadedLbl = parent->getChild<LLUICtrl>("members_not_loaded");
 
     mRoleName = parent->getChild<LLLineEditor>("role_name");
     mRoleTitle = parent->getChild<LLLineEditor>("role_title");
@@ -2198,12 +2202,18 @@ void LLPanelGroupRolesSubTab::update(LLGroupChange gc)
         }
     }
 
-    if ((GC_ROLE_MEMBER_DATA == gc || GC_MEMBER_DATA == gc)
-        && gdatap
-        && gdatap->isMemberDataComplete()
-        && gdatap->isRoleMemberDataComplete())
+    if (gdatap && gdatap->isMemberDataComplete())
     {
-        buildMembersList();
+        if ((GC_ROLE_MEMBER_DATA == gc || GC_MEMBER_DATA == gc)
+            && gdatap->isRoleMemberDataComplete())
+        {
+            buildMembersList();
+        }
+        mMembersNotLoadedLbl->setVisible(false);
+    }
+    else
+    {
+        mMembersNotLoadedLbl->setVisible(true);
     }
 }
 

@@ -309,7 +309,7 @@ def main(extra=[]):
 class LLManifestRegistry(type):
     def __init__(cls, name, bases, dct):
         super(LLManifestRegistry, cls).__init__(name, bases, dct)
-        match = re.match("(\w+)Manifest", name)
+        match = re.match(r"(\w+)Manifest", name)
         if match:
            cls.manifests[match.group(1).lower()] = cls
 
@@ -637,7 +637,7 @@ class LLManifest(object, metaclass=LLManifestRegistry):
             'vers':'_'.join(self.args['version'])}
         print("Creating unpacked file:", unpacked_file_name)
         # could add a gz here but that doubles the time it takes to do this step
-        tf = tarfile.open(self.src_path_of(unpacked_file_name), 'w:')
+        tf = tarfile.open(self.build_path_of(unpacked_file_name), 'w:')
         # add the entire installation package, at the very top level
         tf.add(self.get_dst_prefix(), "")
         tf.close()

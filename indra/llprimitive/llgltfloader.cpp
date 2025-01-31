@@ -51,7 +51,6 @@
 #include "llsdserialize.h"
 #include "lljoint.h"
 
-#include "glh/glh_linear.h"
 #include "llmatrix4a.h"
 
 #include <boost/regex.hpp>
@@ -156,7 +155,7 @@ bool LLGLTFLoader::parseMeshes()
         }
         else
         {
-            setLoadState(ERROR_MODEL + pModel->getStatus());
+            setLoadState(ERROR_MODEL + eLoadState(pModel->getStatus()));
             delete(pModel);
             return false;
         }

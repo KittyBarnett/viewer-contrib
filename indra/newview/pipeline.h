@@ -129,7 +129,7 @@ public:
 
     //attempt to allocate screen buffers at resX, resY
     //returns true if allocation successful, false otherwise
-    bool allocateScreenBuffer(U32 resX, U32 resY, U32 samples);
+    bool allocateScreenBufferInternal(U32 resX, U32 resY);
     bool allocateShadowBuffer(U32 resX, U32 resY);
 
     // rebuild all LLVOVolume render batches
@@ -155,10 +155,13 @@ public:
     void copyScreenSpaceReflections(LLRenderTarget* src, LLRenderTarget* dst);
     void generateLuminance(LLRenderTarget* src, LLRenderTarget* dst);
     void generateExposure(LLRenderTarget* src, LLRenderTarget* dst, bool use_history = true);
+    void tonemap(LLRenderTarget* src, LLRenderTarget* dst, bool gamma_correct = true);
     void gammaCorrect(LLRenderTarget* src, LLRenderTarget* dst);
     void generateGlow(LLRenderTarget* src);
     void applyCAS(LLRenderTarget* src, LLRenderTarget* dst);
-    void applyFXAA(LLRenderTarget* src, LLRenderTarget* dst);
+    void applyFXAA(LLRenderTarget* src, LLRenderTarget* dst, bool combine_glow);
+    void generateSMAABuffers(LLRenderTarget* src);
+    void applySMAA(LLRenderTarget* src, LLRenderTarget* dst, bool combine_glow);
     void renderDoF(LLRenderTarget* src, LLRenderTarget* dst);
     void copyRenderTarget(LLRenderTarget* src, LLRenderTarget* dst);
     void combineGlow(LLRenderTarget* src, LLRenderTarget* dst);
@@ -334,15 +337,13 @@ public:
     // should be called just before rendering pre-water alpha objects
     void doWaterHaze();
 
-    void postDeferredGammaCorrect(LLRenderTarget* screen_target);
-
     void generateSunShadow(LLCamera& camera);
     LLRenderTarget* getSunShadowTarget(U32 i);
     LLRenderTarget* getSpotShadowTarget(U32 i);
 
     void renderHighlight(const LLViewerObject* obj, F32 fade);
 
-    void renderShadow(glh::matrix4f& view, glh::matrix4f& proj, LLCamera& camera, LLCullResult& result, bool depth_clamp);
+    void renderShadow(const glm::mat4& view, const glm::mat4& proj, LLCamera& camera, LLCullResult& result, bool depth_clamp);
     void renderSelectedFaces(const LLColor4& color);
     void renderHighlights();
     void renderDebug();
@@ -722,16 +723,21 @@ public:
     LLRenderTarget          mLastExposure;
 
     // tonemapped and gamma corrected render ready for post
-    LLRenderTarget          mPostMap;
+    LLRenderTarget          mPostPingMap;
+    LLRenderTarget          mPostPongMap;
 
     // FXAA helper target
     LLRenderTarget          mFXAAMap;
+    LLRenderTarget          mSMAABlendBuffer;
 
     // render ui to buffer target
     LLRenderTarget          mUIScreen;
 
     // downres scratch space for GPU downscaling of textures
     LLRenderTarget          mDownResMap;
+
+    // 2k bom scratch target
+    LLRenderTarget          mBakeMap;
 
     LLCullResult            mSky;
     LLCullResult            mReflectedObjects;
@@ -756,10 +762,10 @@ public:
     LLCamera                mShadowCamera[8];
     LLVector3               mShadowExtents[4][2];
     // TODO : separate Sun Shadow and Spot Shadow matrices
-    glh::matrix4f           mSunShadowMatrix[6];
-    glh::matrix4f           mShadowModelview[6];
-    glh::matrix4f           mShadowProjection[6];
-    glh::matrix4f           mReflectionModelView;
+    glm::mat4               mSunShadowMatrix[6];
+    glm::mat4               mShadowModelview[6];
+    glm::mat4               mShadowProjection[6];
+    glm::mat4               mReflectionModelView;
 
     LLPointer<LLDrawable>   mShadowSpotLight[2];
     F32                     mSpotLightFade[2];
@@ -772,7 +778,7 @@ public:
     //water distortion texture (refraction)
     LLRenderTarget              mWaterDis;
 
-    static const U32 MAX_BAKE_WIDTH;
+    static const U32 MAX_PREVIEW_WIDTH;
 
     //texture for making the glow
     LLRenderTarget              mGlow[3];
@@ -781,6 +787,11 @@ public:
     U32                 mNoiseMap;
     U32                 mTrueNoiseMap;
     U32                 mLightFunc;
+
+    //smaa
+    U32                 mSMAAAreaMap = 0;
+    U32                 mSMAASearchMap = 0;
+    U32                 mSMAASampleMap = 0;
 
     LLColor4            mSunDiffuse;
     LLColor4            mMoonDiffuse;
@@ -988,8 +999,7 @@ public:
     //cached settings
     static bool WindLightUseAtmosShaders;
     static bool RenderDeferred;
-    static F32 RenderDeferredSunWash;
-    static U32 RenderFSAASamples;
+    static U32 RenderFSAAType;
     static U32 RenderResolutionDivisor;
     static bool RenderUIBuffer;
     static S32 RenderShadowDetail;
@@ -1030,7 +1040,6 @@ public:
     static F32 CameraFNumber;
     static F32 CameraFocalLength;
     static F32 CameraFieldOfView;
-    static F32 RenderShadowNoise;
     static F32 RenderShadowBlurSize;
     static F32 RenderSSAOScale;
     static U32 RenderSSAOMaxScale;
@@ -1043,8 +1052,6 @@ public:
     static F32 RenderSpotShadowOffset;
     static F32 RenderSpotShadowBias;
     static LLDrawable* RenderSpotLight;
-    static F32 RenderEdgeDepthCutoff;
-    static F32 RenderEdgeNormCutoff;
     static LLVector3 RenderShadowGaussian;
     static F32 RenderShadowBlurDistFactor;
     static bool RenderDeferredAtmospheric;

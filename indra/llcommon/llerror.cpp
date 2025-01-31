@@ -64,6 +64,8 @@
 #define BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED
 #include <boost/stacktrace.hpp>
 
+#include LLCOROS_RMUTEX_HEADER
+
 namespace {
 #if LL_WINDOWS
     void debugger_print(const std::string& s)
@@ -110,7 +112,7 @@ namespace {
         virtual void recordMessage(LLError::ELevel level,
                                     const std::string& message) override
         {
-            LL_PROFILE_ZONE_SCOPED_CATEGORY_LOGGING
+            LL_PROFILE_ZONE_SCOPED_CATEGORY_LOGGING;
             int syslogPriority = LOG_CRIT;
             switch (level) {
                 case LLError::LEVEL_DEBUG:  syslogPriority = LOG_DEBUG; break;
@@ -1431,6 +1433,7 @@ namespace LLError
 
         if (site.mLevel == LEVEL_ERROR)
         {
+            writeToRecorders(site, stringize(boost::stacktrace::stacktrace()));
             g->mFatalMessage = message;
             if (s->mCrashFunction)
             {
@@ -1604,11 +1607,11 @@ namespace LLError
     std::string LLUserWarningMsg::sLocalizedOutOfMemoryWarning;
     LLUserWarningMsg::Handler LLUserWarningMsg::sHandler;
 
-    void LLUserWarningMsg::show(const std::string& message)
+    void LLUserWarningMsg::show(const std::string& message, S32 error_code)
     {
         if (sHandler)
         {
-            sHandler(std::string(), message);
+            sHandler(std::string(), message, error_code);
         }
     }
 
@@ -1616,7 +1619,7 @@ namespace LLError
     {
         if (sHandler && !sLocalizedOutOfMemoryTitle.empty())
         {
-            sHandler(sLocalizedOutOfMemoryTitle, sLocalizedOutOfMemoryWarning);
+            sHandler(sLocalizedOutOfMemoryTitle, sLocalizedOutOfMemoryWarning, ERROR_BAD_ALLOC);
         }
     }
 
@@ -1627,7 +1630,7 @@ namespace LLError
             "Second Life viewer couldn't access some of the files it needs and will be closed."
             "\n\nPlease reinstall viewer from  https://secondlife.com/support/downloads/ and "
             "contact https://support.secondlife.com if issue persists after reinstall.";
-        sHandler("Missing Files", error_string);
+        sHandler("Missing Files", error_string, ERROR_MISSING_FILES);
     }
 
     void LLUserWarningMsg::setHandler(const LLUserWarningMsg::Handler &handler)
@@ -1640,20 +1643,4 @@ namespace LLError
         sLocalizedOutOfMemoryTitle = title;
         sLocalizedOutOfMemoryWarning = message;
     }
-}
-
-void crashdriver(void (*callback)(int*))
-{
-    // The LLERROR_CRASH macro used to have inline code of the form:
-    //int* make_me_crash = NULL;
-    //*make_me_crash = 0;
-
-    // But compilers are getting smart enough to recognize that, so we must
-    // assign to an address supplied by a separate source file. We could do
-    // the assignment here in crashdriver() -- but then BugSplat would group
-    // all LL_ERRS() crashes as the fault of this one function, instead of
-    // identifying the specific LL_ERRS() source line. So instead, do the
-    // assignment in a lambda in the caller's source. We just provide the
-    // nullptr target.
-    callback(nullptr);
 }

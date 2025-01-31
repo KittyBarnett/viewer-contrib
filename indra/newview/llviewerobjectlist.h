@@ -179,9 +179,10 @@ public:
     void setUUIDAndLocal(const LLUUID &id,
                                 const U32 local_id,
                                 const U32 ip,
-                                const U32 port); // Requires knowledge of message system info!
+                                const U32 port,
+                                LLViewerObject* objectp); // Requires knowledge of message system info!
 
-    bool removeFromLocalIDTable(const LLViewerObject* objectp);
+    bool removeFromLocalIDTable(LLViewerObject* objectp);
     // Used ONLY by the orphaned object code.
     U64 getIndex(const U32 local_id, const U32 ip, const U32 port);
 
@@ -259,15 +260,16 @@ extern LLViewerObjectList gObjectList;
  */
 inline LLViewerObject *LLViewerObjectList::findObject(const LLUUID &id)
 {
+    if (id.isNull())
+        return NULL;
+
     auto iter = mUUIDObjectMap.find(id);
-    if(iter != mUUIDObjectMap.end())
+    if (iter != mUUIDObjectMap.end())
     {
         return iter->second;
     }
-    else
-    {
-        return NULL;
-    }
+
+    return NULL;
 }
 
 inline LLViewerObject *LLViewerObjectList::getObject(const S32 index)

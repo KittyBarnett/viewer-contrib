@@ -285,7 +285,7 @@ void LLFloaterImagePreview::draw()
             }
 
             gGL.color3f(1.f, 1.f, 1.f);
-            gGL.begin( LLRender::QUADS );
+            gGL.begin(LLRender::TRIANGLES);
             {
                 gGL.texCoord2f(mPreviewImageRect.mLeft, mPreviewImageRect.mTop);
                 gGL.vertex2i(PREVIEW_HPAD, PREVIEW_TEXTURE_HEIGHT + PREVIEW_VPAD);
@@ -293,6 +293,11 @@ void LLFloaterImagePreview::draw()
                 gGL.vertex2i(PREVIEW_HPAD, PREVIEW_HPAD + PREF_BUTTON_HEIGHT + PREVIEW_HPAD);
                 gGL.texCoord2f(mPreviewImageRect.mRight, mPreviewImageRect.mBottom);
                 gGL.vertex2i(r.getWidth() - PREVIEW_HPAD, PREVIEW_HPAD + PREF_BUTTON_HEIGHT + PREVIEW_HPAD);
+
+                gGL.texCoord2f(mPreviewImageRect.mRight, mPreviewImageRect.mBottom);
+                gGL.vertex2i(r.getWidth() - PREVIEW_HPAD, PREVIEW_HPAD + PREF_BUTTON_HEIGHT + PREVIEW_HPAD);
+                gGL.texCoord2f(mPreviewImageRect.mLeft, mPreviewImageRect.mTop);
+                gGL.vertex2i(PREVIEW_HPAD, PREVIEW_TEXTURE_HEIGHT + PREVIEW_VPAD);
                 gGL.texCoord2f(mPreviewImageRect.mRight, mPreviewImageRect.mTop);
                 gGL.vertex2i(r.getWidth() - PREVIEW_HPAD, PREVIEW_TEXTURE_HEIGHT + PREVIEW_VPAD);
             }
@@ -317,7 +322,7 @@ void LLFloaterImagePreview::draw()
                     gGL.getTexUnit(0)->bind(mAvatarPreview);
                 }
 
-                gGL.begin( LLRender::QUADS );
+                gGL.begin(LLRender::TRIANGLES);
                 {
                     gGL.texCoord2f(0.f, 1.f);
                     gGL.vertex2i(PREVIEW_HPAD, PREVIEW_TEXTURE_HEIGHT + PREVIEW_VPAD);
@@ -325,6 +330,11 @@ void LLFloaterImagePreview::draw()
                     gGL.vertex2i(PREVIEW_HPAD, PREVIEW_HPAD + PREF_BUTTON_HEIGHT + PREVIEW_HPAD);
                     gGL.texCoord2f(1.f, 0.f);
                     gGL.vertex2i(r.getWidth() - PREVIEW_HPAD, PREVIEW_HPAD + PREF_BUTTON_HEIGHT + PREVIEW_HPAD);
+
+                    gGL.texCoord2f(1.f, 0.f);
+                    gGL.vertex2i(r.getWidth() - PREVIEW_HPAD, PREVIEW_HPAD + PREF_BUTTON_HEIGHT + PREVIEW_HPAD);
+                    gGL.texCoord2f(0.f, 1.f);
+                    gGL.vertex2i(PREVIEW_HPAD, PREVIEW_TEXTURE_HEIGHT + PREVIEW_VPAD);
                     gGL.texCoord2f(1.f, 1.f);
                     gGL.vertex2i(r.getWidth() - PREVIEW_HPAD, PREVIEW_TEXTURE_HEIGHT + PREVIEW_VPAD);
                 }
@@ -671,7 +681,7 @@ bool LLImagePreviewAvatar::render()
     gGL.matrixMode(LLRender::MM_PROJECTION);
     gGL.pushMatrix();
     gGL.loadIdentity();
-    gGL.ortho(0.0f, (F32)mFullWidth, 0.0f, (F32)mFullHeight, -1.0f, 1.0f);
+    gGL.ortho(0.0f, (F32)getFullWidth(), 0.0f, (F32)getFullHeight(), -1.0f, 1.0f);
 
     gGL.matrixMode(LLRender::MM_MODELVIEW);
     gGL.pushMatrix();
@@ -683,7 +693,7 @@ bool LLImagePreviewAvatar::render()
 
     gUIProgram.bind();
 
-    gl_rect_2d_simple( mFullWidth, mFullHeight );
+    gl_rect_2d_simple(getFullWidth(), getFullHeight());
 
     gGL.matrixMode(LLRender::MM_PROJECTION);
     gGL.popMatrix();
@@ -705,9 +715,9 @@ bool LLImagePreviewAvatar::render()
 
     stop_glerror();
 
-    LLViewerCamera::getInstance()->setAspect((F32)mFullWidth / mFullHeight);
+    LLViewerCamera::getInstance()->setAspect((F32)getFullWidth() / getFullHeight());
     LLViewerCamera::getInstance()->setView(LLViewerCamera::getInstance()->getDefaultFOV() / mCameraZoom);
-    LLViewerCamera::getInstance()->setPerspective(false, mOrigin.mX, mOrigin.mY, mFullWidth, mFullHeight, false);
+    LLViewerCamera::getInstance()->setPerspective(false, mOrigin.mX, mOrigin.mY, getFullWidth(), getFullHeight(), false);
 
     LLVertexBuffer::unbind();
     avatarp->updateLOD();
@@ -852,7 +862,7 @@ void LLImagePreviewSculpted::setPreviewTarget(LLImageRaw* imagep, F32 distance)
     }
 
     // build indices
-    for (U16 i = 0; i < num_indices; i++)
+    for (U32 i = 0; i < num_indices; i++)
     {
         *(index_strider++) = vf.mIndices[i];
     }
@@ -875,7 +885,7 @@ bool LLImagePreviewSculpted::render()
     gGL.matrixMode(LLRender::MM_PROJECTION);
     gGL.pushMatrix();
     gGL.loadIdentity();
-    gGL.ortho(0.0f, (F32)mFullWidth, 0.0f, (F32)mFullHeight, -1.0f, 1.0f);
+    gGL.ortho(0.0f, (F32)getFullWidth(), 0.0f, (F32)getFullHeight(), -1.0f, 1.0f);
 
     gGL.matrixMode(LLRender::MM_MODELVIEW);
     gGL.pushMatrix();
@@ -885,7 +895,7 @@ bool LLImagePreviewSculpted::render()
 
     gUIProgram.bind();
 
-    gl_rect_2d_simple( mFullWidth, mFullHeight );
+    gl_rect_2d_simple(getFullWidth(), getFullHeight());
 
     gGL.matrixMode(LLRender::MM_PROJECTION);
     gGL.popMatrix();
@@ -908,9 +918,9 @@ bool LLImagePreviewSculpted::render()
 
     stop_glerror();
 
-    LLViewerCamera::getInstance()->setAspect((F32) mFullWidth / mFullHeight);
+    LLViewerCamera::getInstance()->setAspect((F32)getFullWidth() / getFullHeight());
     LLViewerCamera::getInstance()->setView(LLViewerCamera::getInstance()->getDefaultFOV() / mCameraZoom);
-    LLViewerCamera::getInstance()->setPerspective(false, mOrigin.mX, mOrigin.mY, mFullWidth, mFullHeight, false);
+    LLViewerCamera::getInstance()->setPerspective(false, mOrigin.mX, mOrigin.mY, getFullWidth(), getFullHeight(), false);
 
     const LLVolumeFace &vf = mVolume->getVolumeFace(0);
     U32 num_indices = vf.mNumIndices;

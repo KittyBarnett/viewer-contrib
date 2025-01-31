@@ -193,7 +193,7 @@ LLGLTFPreviewTexture::LLGLTFPreviewTexture(LLPointer<LLFetchedGLTFMaterial> mate
 // static
 LLPointer<LLGLTFPreviewTexture> LLGLTFPreviewTexture::create(LLPointer<LLFetchedGLTFMaterial> material)
 {
-    return new LLGLTFPreviewTexture(material, LLPipeline::MAX_BAKE_WIDTH);
+    return new LLGLTFPreviewTexture(material, LLPipeline::MAX_PREVIEW_WIDTH);
 }
 
 bool LLGLTFPreviewTexture::needsRender()
@@ -434,7 +434,7 @@ bool LLGLTFPreviewTexture::render()
     SetTemporarily<bool> no_dof(&LLPipeline::RenderDepthOfField, false);
     SetTemporarily<bool> no_glow(&LLPipeline::sRenderGlow, false);
     SetTemporarily<bool> no_ssr(&LLPipeline::RenderScreenSpaceReflections, false);
-    SetTemporarily<U32> no_fxaa(&LLPipeline::RenderFSAASamples, U32(0));
+    SetTemporarily<U32> no_aa(&LLPipeline::RenderFSAAType, U32(0));
     SetTemporarily<LLPipeline::RenderTargetPack*> use_auxiliary_render_target(&gPipeline.mRT, &gPipeline.mAuxillaryRT);
 
     LLVector3 light_dir3(1.0f, 1.0f, 1.0f);
@@ -462,8 +462,8 @@ bool LLGLTFPreviewTexture::render()
     // Set up camera and viewport
     const LLVector3 origin(0.0, 0.0, 0.0);
     camera.lookAt(origin, object_position);
-    camera.setAspect((F32)(mFullHeight / mFullWidth));
-    const LLRect texture_rect(0, mFullHeight, mFullWidth, 0);
+    camera.setAspect((F32)getFullHeight() / getFullWidth());
+    const LLRect texture_rect(0, getFullHeight(), getFullWidth(), 0);
     camera.setPerspective(NOT_FOR_SELECTION, texture_rect.mLeft, texture_rect.mBottom, texture_rect.getWidth(), texture_rect.getHeight(), false, camera.getNear(), MAX_FAR_CLIP*2.f);
 
     // Generate sphere object on-the-fly. Discard afterwards. (Vertex buffer is
@@ -471,10 +471,10 @@ bool LLGLTFPreviewTexture::render()
     PreviewSphere& preview_sphere = get_preview_sphere(mGLTFMaterial, object_transform);
 
     gPipeline.setupHWLights();
-    glh::matrix4f mat = copy_matrix(gGLModelView);
-    glh::vec4f transformed_light_dir(light_dir.mV);
-    mat.mult_matrix_vec(transformed_light_dir);
-    SetTemporarily<LLVector4> force_sun_direction_high_graphics(&gPipeline.mTransformedSunDir, LLVector4(transformed_light_dir.v));
+    glm::mat4 mat = get_current_modelview();
+    glm::vec4 transformed_light_dir = glm::make_vec4(light_dir.mV);
+    transformed_light_dir = mat * transformed_light_dir;
+    SetTemporarily<LLVector4> force_sun_direction_high_graphics(&gPipeline.mTransformedSunDir, LLVector4(glm::value_ptr(transformed_light_dir)));
     // Override lights to ensure the sun is always shining from a certain direction (low graphics)
     // See also force_sun_direction_high_graphics and fixup_shader_constants
     {
@@ -523,31 +523,19 @@ bool LLGLTFPreviewTexture::render()
     gPipeline.copyScreenSpaceReflections(&screen, &gPipeline.mSceneMap);
     gPipeline.generateLuminance(&screen, &gPipeline.mLuminanceMap);
     gPipeline.generateExposure(&gPipeline.mLuminanceMap, &gPipeline.mExposureMap, /*use_history = */ false);
-    gPipeline.gammaCorrect(&screen, &gPipeline.mPostMap);
+
+    LLRenderTarget* src = &gPipeline.mPostPingMap;
+    LLRenderTarget* dst = &gPipeline.mPostPongMap;
+    gPipeline.tonemap(&screen, dst);
+    std::swap(src, dst);
+
+    // Final render
     LLVertexBuffer::unbind();
-    gPipeline.generateGlow(&gPipeline.mPostMap);
-    gPipeline.combineGlow(&gPipeline.mPostMap, &screen);
-    gPipeline.renderDoF(&screen, &gPipeline.mPostMap);
-    gPipeline.applyFXAA(&gPipeline.mPostMap, &screen);
+    gPipeline.generateGlow(src);
+    gPipeline.combineGlow(src, nullptr);
 
     // *HACK: Restore mExposureMap (it will be consumed by generateExposure next frame)
     gPipeline.mExposureMap.swapFBORefs(gPipeline.mLastExposure);
-
-    // Final render
-
-    gDeferredPostNoDoFProgram.bind();
-
-    // From LLPipeline::renderFinalize: "Whatever is last in the above post processing chain should _always_ be rendered directly here.  If not, expect problems."
-    gDeferredPostNoDoFProgram.bindTexture(LLShaderMgr::DEFERRED_DIFFUSE, &screen);
-    gDeferredPostNoDoFProgram.bindTexture(LLShaderMgr::DEFERRED_DEPTH, mBoundTarget, true);
-
-    {
-        LLGLDepthTest depth_test(GL_TRUE, GL_TRUE, GL_ALWAYS);
-        gPipeline.mScreenTriangleVB->setBuffer();
-        gPipeline.mScreenTriangleVB->drawArrays(LLRender::TRIANGLES, 0, 3);
-    }
-
-    gDeferredPostNoDoFProgram.unbind();
 
     // Clean up
     gPipeline.setupHWLights();

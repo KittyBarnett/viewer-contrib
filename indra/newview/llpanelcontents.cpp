@@ -31,6 +31,7 @@
 
 // linden library includes
 #include "llerror.h"
+#include "llfiltereditor.h"
 #include "llfloaterreg.h"
 #include "llfontgl.h"
 #include "llinventorydefines.h"
@@ -83,7 +84,13 @@ bool LLPanelContents::postBuild()
     childSetAction("button new script",&LLPanelContents::onClickNewScript, this);
     childSetAction("button permissions",&LLPanelContents::onClickPermissions, this);
 
+    mFilterEditor = getChild<LLFilterEditor>("contents_filter");
+    mFilterEditor->setCommitCallback([&](LLUICtrl*, const LLSD&) { onFilterEdit(); });
+
     mPanelInventoryObject = getChild<LLPanelObjectInventory>("contents_inventory");
+
+    // update permission filter once UI is fully initialized
+    mSavedFolderState.setApply(false);
 
     return true;
 }
@@ -129,6 +136,66 @@ void LLPanelContents::getState(LLViewerObject *objectp )
     mPanelInventoryObject->setEnabled(!objectp->isPermanentEnforced());
 }
 
+void LLPanelContents::onFilterEdit()
+{
+    const std::string& filter_substring = mFilterEditor->getText();
+    if (!mPanelInventoryObject->hasInventory())
+    {
+        mDirtyFilter = true;
+    }
+    else
+    {
+        LLFolderView* root_folder = mPanelInventoryObject->getRootFolder();
+        if (filter_substring.empty())
+        {
+            if (mPanelInventoryObject->getFilter().getFilterSubString().empty())
+            {
+                // The current filter and the new filter are empty, nothing to do
+                return;
+            }
+
+            if (mDirtyFilter && !mSavedFolderState.hasOpenFolders())
+            {
+                if (root_folder)
+                {
+                    root_folder->setOpenArrangeRecursively(true, LLFolderViewFolder::ERecurseType::RECURSE_DOWN);
+                }
+            }
+            else
+            {
+                mSavedFolderState.setApply(true);
+                if (root_folder)
+                {
+                    root_folder->applyFunctorRecursively(mSavedFolderState);
+                }
+            }
+            mDirtyFilter = false;
+
+            // Add a folder with the current item to the list of previously opened folders
+            if (root_folder)
+            {
+                LLOpenFoldersWithSelection opener;
+                root_folder->applyFunctorRecursively(opener);
+                root_folder->scrollToShowSelection();
+            }
+        }
+        else if (mPanelInventoryObject->getFilter().getFilterSubString().empty())
+        {
+            // The first letter in search term, save existing folder open state
+            if (!mPanelInventoryObject->getFilter().isNotDefault())
+            {
+                mSavedFolderState.setApply(false);
+                if (root_folder)
+                {
+                    root_folder->applyFunctorRecursively(mSavedFolderState);
+                }
+                mDirtyFilter = false;
+            }
+        }
+    }
+    mPanelInventoryObject->getFilter().setFilterSubString(filter_substring);
+}
+
 void LLPanelContents::refresh()
 {
     const bool children_ok = true;
@@ -148,7 +215,6 @@ void LLPanelContents::clearContents()
         mPanelInventoryObject->clearInventoryTask();
     }
 }
-
 
 //
 // Static functions
@@ -198,7 +264,6 @@ void LLPanelContents::onClickNewScript(void *userdata)
         // editing ASAP.
     }
 }
-
 
 // static
 void LLPanelContents::onClickPermissions(void *userdata)

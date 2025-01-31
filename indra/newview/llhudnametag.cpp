@@ -229,35 +229,20 @@ void LLHUDNameTag::render()
     if (sDisplayText)
     {
         LLGLDepthTest gls_depth(GL_TRUE, GL_FALSE);
-        //LLGLDisable gls_stencil(GL_STENCIL_TEST);
-        renderText(false);
+        renderText();
     }
 }
 
-void LLHUDNameTag::renderText(bool for_select)
+void LLHUDNameTag::renderText()
 {
     if (!mVisible || mHidden)
     {
         return;
     }
 
-    // don't pick text that isn't bound to a viewerobject
-    if (for_select &&
-        (!mSourceObject || mSourceObject->mDrawable.isNull()))
-    {
-        return;
-    }
+    LL_PROFILE_ZONE_SCOPED_CATEGORY_UI;
 
-    if (for_select)
-    {
-        gGL.getTexUnit(0)->disable();
-    }
-    else
-    {
-        gGL.getTexUnit(0)->enable(LLTexUnit::TT_TEXTURE);
-    }
-
-    LLGLState gls_blend(GL_BLEND, !for_select);
+    gGL.getTexUnit(0)->enable(LLTexUnit::TT_TEXTURE);
 
     LLColor4 shadow_color(0.f, 0.f, 0.f, 1.f);
     F32 alpha_factor = 1.f;
@@ -290,7 +275,8 @@ void LLHUDNameTag::renderText(bool for_select)
     LLVector3 x_pixel_vec;
     LLVector3 y_pixel_vec;
 
-    LLViewerCamera::getInstance()->getPixelVectors(mPositionAgent, y_pixel_vec, x_pixel_vec);
+    LLViewerCamera* camera = LLViewerCamera::getInstance();
+    camera->getPixelVectors(mPositionAgent, y_pixel_vec, x_pixel_vec);
 
     LLVector3 width_vec = mWidth * x_pixel_vec;
     LLVector3 height_vec = mHeight * y_pixel_vec;
@@ -298,7 +284,7 @@ void LLHUDNameTag::renderText(bool for_select)
     mRadius = (width_vec + height_vec).magVec() * 0.5f;
 
     LLCoordGL screen_pos;
-    LLViewerCamera::getInstance()->projectPosAgentToScreen(mPositionAgent, screen_pos, false);
+    camera->projectPosAgentToScreen(mPositionAgent, screen_pos, false);
 
     LLVector2 screen_offset = updateScreenPos(mPositionOffset);
 
@@ -316,7 +302,7 @@ void LLHUDNameTag::renderText(bool for_select)
         const S32 label_height = ll_round((mFontp->getLineHeight() * (F32)mLabelSegments.size() + (VERTICAL_PADDING / 3.f)));
         label_top_rect.mBottom = label_top_rect.mTop - label_height;
         LLColor4 label_top_color = text_color;
-        label_top_color.mV[VALPHA] = gSavedSettings.getF32("ChatBubbleOpacity") * alpha_factor;
+        label_top_color.mV[VALPHA] = bubble_opacity() * alpha_factor;
 
         mRoundedRectTopImgp->draw3D(render_position, x_pixel_vec, y_pixel_vec, label_top_rect, label_top_color);
     }
@@ -343,7 +329,7 @@ void LLHUDNameTag::renderText(bool for_select)
             }
 
             LLColor4 label_color(0.f, 0.f, 0.f, alpha_factor);
-            hud_render_text(segment_iter->getText(), render_position, *fontp, segment_iter->mStyle, LLFontGL::NO_SHADOW, x_offset, y_offset, label_color, false);
+            hud_render_text(segment_iter->getText(), render_position, &segment_iter->mFontBufferLabel, *fontp, segment_iter->mStyle, LLFontGL::NO_SHADOW, x_offset, y_offset, label_color, false);
         }
     }
 
@@ -388,15 +374,11 @@ void LLHUDNameTag::renderText(bool for_select)
             text_color = segment_iter->mColor;
             text_color.mV[VALPHA] *= alpha_factor;
 
-            hud_render_text(segment_iter->getText(), render_position, *fontp, style, shadow, x_offset, y_offset, text_color, false);
+            hud_render_text(segment_iter->getText(), render_position, &segment_iter->mFontBufferText, *fontp, style, shadow, x_offset, y_offset, text_color, false);
         }
     }
     /// Reset the default color to white.  The renderer expects this to be the default.
     gGL.color4f(1.0f, 1.0f, 1.0f, 1.0f);
-    if (for_select)
-    {
-        gGL.getTexUnit(0)->enable(LLTexUnit::TT_TEXTURE);
-    }
 }
 
 void LLHUDNameTag::setString(const std::string &text_utf8)
@@ -645,12 +627,13 @@ LLVector2 LLHUDNameTag::updateScreenPos(LLVector2 &offset)
     LLVector2 screen_pos_vec;
     LLVector3 x_pixel_vec;
     LLVector3 y_pixel_vec;
-    LLViewerCamera::getInstance()->getPixelVectors(mPositionAgent, y_pixel_vec, x_pixel_vec);
+    LLViewerCamera* camera = LLViewerCamera::getInstance();
+    camera->getPixelVectors(mPositionAgent, y_pixel_vec, x_pixel_vec);
     LLVector3 world_pos = mPositionAgent + (offset.mV[VX] * x_pixel_vec) + (offset.mV[VY] * y_pixel_vec);
-    if (!LLViewerCamera::getInstance()->projectPosAgentToScreen(world_pos, screen_pos, false) && mVisibleOffScreen)
+    if (!camera->projectPosAgentToScreen(world_pos, screen_pos, false) && mVisibleOffScreen)
     {
         // bubble off-screen, so find a spot for it along screen edge
-        LLViewerCamera::getInstance()->projectPosAgentToScreenEdge(world_pos, screen_pos);
+        camera->projectPosAgentToScreenEdge(world_pos, screen_pos);
     }
 
     screen_pos_vec.setVec((F32)screen_pos.mX, (F32)screen_pos.mY);

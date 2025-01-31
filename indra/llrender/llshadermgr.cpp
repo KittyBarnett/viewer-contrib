@@ -79,7 +79,7 @@ bool LLShaderMgr::attachShaderFeatures(LLGLSLShader * shader)
     //////////////////////////////////////
 
     // NOTE order of shader object attaching is VERY IMPORTANT!!!
-    if (features->calculatesAtmospherics)
+    if (features->calculatesAtmospherics || features->hasGamma || features->isDeferred)
     {
         if (!shader->attachVertexObject("windlight/atmosphericsVarsV.glsl"))
         {
@@ -218,6 +218,14 @@ bool LLShaderMgr::attachShaderFeatures(LLGLSLShader * shader)
     if (features->isDeferred || features->hasReflectionProbes)
     {
         if (!shader->attachFragmentObject("deferred/deferredUtil.glsl"))
+        {
+            return false;
+        }
+    }
+
+    if (features->hasFullGBuffer)
+    {
+        if (!shader->attachFragmentObject("deferred/gbufferUtil.glsl"))
         {
             return false;
         }
@@ -559,17 +567,11 @@ GLuint LLShaderMgr::loadShaderFile(const std::string& filename, S32 & shader_lev
         }
         else if (major_version == 3)
         {
-            if (minor_version < 10)
+            if (minor_version <= 29)
             {
-                shader_code_text[shader_code_count++] = strdup("#version 300\n");
-            }
-            else if (minor_version <= 19)
-            {
-                shader_code_text[shader_code_count++] = strdup("#version 310\n");
-            }
-            else if (minor_version <= 29)
-            {
-                shader_code_text[shader_code_count++] = strdup("#version 320\n");
+                // OpenGL 3.2 had GLSL version 1.50.  anything after that the version numbers match.
+                // https://www.khronos.org/opengl/wiki/Core_Language_(GLSL)#OpenGL_and_GLSL_versions
+                shader_code_text[shader_code_count++] = strdup("#version 150\n");
             }
             else
             {
@@ -578,7 +580,8 @@ GLuint LLShaderMgr::loadShaderFile(const std::string& filename, S32 & shader_lev
         }
         else
         {
-            if (type == GL_GEOMETRY_SHADER)
+            // OpenGL 3.2 had GLSL version 1.50.  anything after that the version numbers match.
+            if (type == GL_GEOMETRY_SHADER || minor_version >= 50)
             {
                 //set version to 1.50
                 shader_code_text[shader_code_count++] = strdup("#version 150\n");
@@ -597,13 +600,22 @@ GLuint LLShaderMgr::loadShaderFile(const std::string& filename, S32 & shader_lev
         }
     }
 
+    if (type == GL_FRAGMENT_SHADER)
+    {
+        extra_code_text[extra_code_count++] = strdup("#define FRAGMENT_SHADER 1\n");
+    }
+    else
+    {
+        extra_code_text[extra_code_count++] = strdup("#define VERTEX_SHADER 1\n");
+    }
+
     // Use alpha float to store bit flags
     // See: C++: addDeferredAttachment(), shader: frag_data[2]
     extra_code_text[extra_code_count++] = strdup("#define GBUFFER_FLAG_SKIP_ATMOS   0.0 \n"); // atmo kill
     extra_code_text[extra_code_count++] = strdup("#define GBUFFER_FLAG_HAS_ATMOS    0.34\n"); // bit 0
     extra_code_text[extra_code_count++] = strdup("#define GBUFFER_FLAG_HAS_PBR      0.67\n"); // bit 1
     extra_code_text[extra_code_count++] = strdup("#define GBUFFER_FLAG_HAS_HDRI      1.0\n");  // bit 2
-    extra_code_text[extra_code_count++] = strdup("#define GET_GBUFFER_FLAG(flag)    (abs(norm.w-flag)< 0.1)\n");
+    extra_code_text[extra_code_count++] = strdup("#define GET_GBUFFER_FLAG(data, flag)    (abs(data-flag)< 0.1)\n");
 
     if (defines)
     {
@@ -713,6 +725,9 @@ GLuint LLShaderMgr::loadShaderFile(const std::string& filename, S32 & shader_lev
             LL_ERRS() << "Indexed texture rendering requires GLSL 1.30 or later." << LL_ENDL;
         }
     }
+
+    // Master definition can be found in deferredUtil.glsl
+    extra_code_text[extra_code_count++] = strdup("struct GBufferInfo { vec4 albedo; vec4 specular; vec3 normal; vec4 emissive; float gbufferFlag; float envIntensity; };\n");
 
     //copy file into memory
     enum {
@@ -1181,8 +1196,9 @@ void LLShaderMgr::initAttribsAndUniforms()
     mReservedUniforms.push_back("gltf_material_id"); // (GLTF)
 
     mReservedUniforms.push_back("terrain_texture_transforms"); // (GLTF)
+    mReservedUniforms.push_back("terrain_stamp_scale");
 
-    llassert(mReservedUniforms.size() == LLShaderMgr::TERRAIN_TEXTURE_TRANSFORMS +1);
+    llassert(mReservedUniforms.size() == LLShaderMgr::TERRAIN_STAMP_SCALE +1);
 
     mReservedUniforms.push_back("viewport");
 
@@ -1246,6 +1262,7 @@ void LLShaderMgr::initAttribsAndUniforms()
     mReservedUniforms.push_back("sky_hdr_scale");
     mReservedUniforms.push_back("sky_sunlight_scale");
     mReservedUniforms.push_back("sky_ambient_scale");
+    mReservedUniforms.push_back("classic_mode");
     mReservedUniforms.push_back("blue_horizon");
     mReservedUniforms.push_back("blue_density");
     mReservedUniforms.push_back("haze_horizon");
@@ -1291,9 +1308,6 @@ void LLShaderMgr::initAttribsAndUniforms()
     mReservedUniforms.push_back("shadow_matrix");
     mReservedUniforms.push_back("env_mat");
     mReservedUniforms.push_back("shadow_clip");
-    mReservedUniforms.push_back("sun_wash");
-    mReservedUniforms.push_back("shadow_noise");
-    mReservedUniforms.push_back("blur_size");
     mReservedUniforms.push_back("ssao_radius");
     mReservedUniforms.push_back("ssao_max_radius");
     mReservedUniforms.push_back("ssao_factor");
@@ -1309,8 +1323,6 @@ void LLShaderMgr::initAttribsAndUniforms()
     mReservedUniforms.push_back("moon_dir");
     mReservedUniforms.push_back("shadow_res");
     mReservedUniforms.push_back("proj_shadow_res");
-    mReservedUniforms.push_back("depth_cutoff");
-    mReservedUniforms.push_back("norm_cutoff");
     mReservedUniforms.push_back("shadow_target_width");
 
     llassert(mReservedUniforms.size() == LLShaderMgr::DEFERRED_SHADOW_TARGET_WIDTH + 1);
@@ -1360,9 +1372,7 @@ void LLShaderMgr::initAttribsAndUniforms()
     mReservedUniforms.push_back("noiseMap");
     mReservedUniforms.push_back("lightFunc");
     mReservedUniforms.push_back("lightMap");
-    mReservedUniforms.push_back("bloomMap");
     mReservedUniforms.push_back("projectionMap");
-    mReservedUniforms.push_back("norm_mat");
 
     mReservedUniforms.push_back("specular_color");
     mReservedUniforms.push_back("env_intensity");
@@ -1441,10 +1451,6 @@ void LLShaderMgr::initAttribsAndUniforms()
     mReservedUniforms.push_back("sun_size");
     mReservedUniforms.push_back("fog_color");
 
-    mReservedUniforms.push_back("transmittance_texture");
-    mReservedUniforms.push_back("scattering_texture");
-    mReservedUniforms.push_back("single_mie_scattering_texture");
-    mReservedUniforms.push_back("irradiance_texture");
     mReservedUniforms.push_back("blend_factor");
     mReservedUniforms.push_back("moisture_level");
     mReservedUniforms.push_back("droplet_radius");
@@ -1467,6 +1473,11 @@ void LLShaderMgr::initAttribsAndUniforms()
     mReservedUniforms.push_back("moonlight_color");
 
     mReservedUniforms.push_back("debug_normal_draw_length");
+
+    mReservedUniforms.push_back("edgesTex");
+    mReservedUniforms.push_back("areaTex");
+    mReservedUniforms.push_back("searchTex");
+    mReservedUniforms.push_back("blendTex");
 
     llassert(mReservedUniforms.size() == END_RESERVED_UNIFORMS);
 

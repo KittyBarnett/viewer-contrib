@@ -39,12 +39,12 @@ LLStyle::Params::Params()
     readonly_color("readonly_color", LLColor4::black),
     selected_color("selected_color", LLColor4::black),
     alpha("alpha", 1.f),
-    font("font", LLFontGL::getFontMonospace()),
+    font("font", LLStyle::getDefaultFont()),
     image("image"),
     link_href("href"),
     is_link("is_link")
-{}
-
+{
+}
 
 LLStyle::LLStyle(const LLStyle::Params& p)
 :   mVisible(p.visible),
@@ -57,17 +57,39 @@ LLStyle::LLStyle(const LLStyle::Params& p)
     mDropShadow(p.drop_shadow),
     mImagep(p.image()),
     mAlpha(p.alpha)
-{}
+{
+}
+
+LLStyle* LLStyle::makeCopy() const
+{
+    LLStyle* copy = new LLStyle();
+    copy->mDropShadow = mDropShadow;
+    copy->mFontName = mFontName;
+    copy->mLink = mLink;
+    copy->mColor.set(mColor.get());
+    copy->mReadOnlyColor.set(mReadOnlyColor.get());
+    copy->mSelectedColor.set(mSelectedColor.get());
+    copy->mFont = mFont;
+    copy->mImagep = mImagep;
+    copy->mAlpha = mAlpha;
+    copy->mVisible = mVisible;
+    copy->mIsLink = mIsLink;
+    return copy;
+}
 
 void LLStyle::setFont(const LLFontGL* font)
 {
     mFont = font;
 }
 
-
 const LLFontGL* LLStyle::getFont() const
 {
     return mFont;
+}
+
+const LLFontGL* LLStyle::getDefaultFont()
+{
+    return LLFontGL::getFontMonospace();
 }
 
 void LLStyle::setLinkHREF(const std::string& href)

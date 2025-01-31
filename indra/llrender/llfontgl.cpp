@@ -147,7 +147,7 @@ S32 LLFontGL::render(const LLWString &wstr, S32 begin_offset, F32 x, F32 y, cons
 {
     LL_PROFILE_ZONE_SCOPED_CATEGORY_UI;
 
-    if(!sDisplayFont) //do not display texts
+    if (!sDisplayFont) //do not display texts
     {
         return static_cast<S32>(wstr.length());
     }
@@ -181,23 +181,27 @@ S32 LLFontGL::render(const LLWString &wstr, S32 begin_offset, F32 x, F32 y, cons
 
     gGL.loadUIIdentity();
 
-    LLVector2 origin(floorf(sCurOrigin.mX*sScaleX), floorf(sCurOrigin.mY*sScaleY));
+    LLVector2 origin(floorf(sCurOrigin.mX * sScaleX), floorf(sCurOrigin.mY * sScaleY));
 
     // Depth translation, so that floating text appears 'in-world'
     // and is correctly occluded.
-    gGL.translatef(0.f,0.f,sCurDepth);
+    gGL.translatef(0.f, 0.f, sCurDepth);
 
     S32 chars_drawn = 0;
-    S32 i;
-    S32 length;
+    S32 length = (S32)wstr.length() - begin_offset;
 
-    if (-1 == max_chars)
+    if (max_chars < 0)
     {
-        max_chars = length = (S32)wstr.length() - begin_offset;
+        max_chars = length;
     }
-    else
+    else if (max_chars < length)
     {
-        length = llmin((S32)wstr.length() - begin_offset, max_chars );
+        length = max_chars;
+    }
+
+    if (length < 1)
+    {
+        return 0;
     }
 
     F32 cur_x, cur_y, cur_render_x, cur_render_y;
@@ -270,50 +274,59 @@ S32 LLFontGL::render(const LLWString &wstr, S32 begin_offset, F32 x, F32 y, cons
 
     const LLFontGlyphInfo* next_glyph = NULL;
 
-    const S32 GLYPH_BATCH_SIZE = 30;
-    LLVector3 vertices[GLYPH_BATCH_SIZE * 4];
-    LLVector2 uvs[GLYPH_BATCH_SIZE * 4];
-    LLColor4U colors[GLYPH_BATCH_SIZE * 4];
+    // Maximum number of queued glyphs
+    static constexpr U32 GLYPH_BATCH_SIZE = 30;
+    // Each glyph uses 2 triangles == 6 vertices/uvs/colors
+    static thread_local LLVector4a vertices[GLYPH_BATCH_SIZE * 6];
+    static thread_local LLVector2 uvs[GLYPH_BATCH_SIZE * 6];
+    static thread_local LLColor4U colors[GLYPH_BATCH_SIZE * 6];
 
     LLColor4U text_color(color);
     // Preserve the transparency to render fading emojis in fading text (e.g.
     // for the chat console)... HB
     LLColor4U emoji_color(255, 255, 255, text_color.mV[VALPHA]);
 
-    std::pair<EFontGlyphType, S32> bitmap_entry = std::make_pair(EFontGlyphType::Grayscale, -1);
-    S32 glyph_count = 0;
-    for (i = begin_offset; i < begin_offset + length; i++)
+    U32 glyph_count = 0;
+    auto render_queued_glyphs = [&](U32 max_glyph_count = 0)
+        {
+            if (glyph_count > max_glyph_count)
+            {
+                gGL.begin(LLRender::TRIANGLES);
+                {
+                    gGL.vertexBatchPreTransformed(vertices, uvs, colors, glyph_count * 6);
+                }
+                gGL.end();
+                glyph_count = 0;
+            }
+        };
+
+    llwchar last_wch = 0;
+    U32 glyph_per_char = 0; // This value can be 1, 2 or 6 depending on shadow
+                            // It will be set after the first call of drawGlyph
+    for (S32 i = 0; i < length; i++)
     {
-        llwchar wch = wstr[i];
+        llwchar wch = wstr[begin_offset + i];
 
         const LLFontGlyphInfo* fgi = next_glyph;
         next_glyph = NULL;
-        if(!fgi)
+        if (!fgi)
         {
-            fgi = mFontFreetype->getGlyphInfo(wch, (!use_color) ? EFontGlyphType::Grayscale : EFontGlyphType::Color);
+            fgi = mFontFreetype->getGlyphInfo(wch, use_color ? EFontGlyphType::Color : EFontGlyphType::Grayscale);
         }
         if (!fgi)
         {
             LL_ERRS() << "Missing Glyph Info" << LL_ENDL;
             break;
         }
+
         // Per-glyph bitmap texture.
-        std::pair<EFontGlyphType, S32> next_bitmap_entry = fgi->mBitmapEntry;
-        if (next_bitmap_entry != bitmap_entry)
+        const std::pair<EFontGlyphType, S32>& bitmap_entry = fgi->mBitmapEntry;
+        if (wch != last_wch || i == 0)
         {
             // Actually draw the queued glyphs before switching their texture;
             // otherwise the queued glyphs will be taken from wrong textures.
-            if (glyph_count > 0)
-            {
-                gGL.begin(LLRender::QUADS);
-                {
-                    gGL.vertexBatchPreTransformed(vertices, uvs, colors, glyph_count * 4);
-                }
-                gGL.end();
-                glyph_count = 0;
-            }
+            render_queued_glyphs();
 
-            bitmap_entry = next_bitmap_entry;
             LLImageGL* font_image = font_bitmap_cache->getImageGL(bitmap_entry.first, bitmap_entry.second);
             gGL.getTexUnit(0)->bind(font_image);
         }
@@ -336,33 +349,35 @@ S32 LLFontGL::render(const LLWString &wstr, S32 begin_offset, F32 x, F32 y, cons
                     (F32)ll_round(cur_render_x + (F32)fgi->mXBearing) + (F32)fgi->mWidth,
                     (F32)ll_round(cur_render_y + (F32)fgi->mYBearing) - (F32)fgi->mHeight);
 
-        if (glyph_count >= GLYPH_BATCH_SIZE)
-        {
-            gGL.begin(LLRender::QUADS);
-            {
-                gGL.vertexBatchPreTransformed(vertices, uvs, colors, glyph_count * 4);
-            }
-            gGL.end();
-
-            glyph_count = 0;
-        }
+        // Prevent the buffer overflow
+        render_queued_glyphs(GLYPH_BATCH_SIZE - glyph_per_char);
 
         const LLColor4U& col =
             bitmap_entry.first == EFontGlyphType::Grayscale ? text_color
                                                             : emoji_color;
+        // This function emplaces data to arrays vertices, uvs, colors
+        // and increases glyph_count on 1, 2 or 6 depending on shadow
         drawGlyph(glyph_count, vertices, uvs, colors, screen_rect, uv_rect,
                   col, style_to_add, shadow, drop_shadow_strength);
+        llassert(glyph_count <= GLYPH_BATCH_SIZE);
+        if (!glyph_per_char)
+        {
+            glyph_per_char = glyph_count;
+        }
 
         chars_drawn++;
         cur_x += fgi->mXAdvance;
         cur_y += fgi->mYAdvance;
 
-        llwchar next_char = wstr[i+1];
-        if (next_char && (next_char < LAST_CHARACTER))
+        if (i + 1 < length)
         {
-            // Kern this puppy.
-            next_glyph = mFontFreetype->getGlyphInfo(next_char, (!use_color) ? EFontGlyphType::Grayscale : EFontGlyphType::Color);
-            cur_x += mFontFreetype->getXKerning(fgi, next_glyph);
+            llwchar next_char = wstr[begin_offset + i + 1];
+            if (next_char && (next_char < LAST_CHARACTER))
+            {
+                // Kern this puppy.
+                next_glyph = mFontFreetype->getGlyphInfo(next_char, use_color ? EFontGlyphType::Color : EFontGlyphType::Grayscale);
+                cur_x += mFontFreetype->getXKerning(fgi, next_glyph);
+            }
         }
 
         // Round after kerning.
@@ -376,12 +391,7 @@ S32 LLFontGL::render(const LLWString &wstr, S32 begin_offset, F32 x, F32 y, cons
         cur_render_y = cur_y;
     }
 
-    gGL.begin(LLRender::QUADS);
-    {
-        gGL.vertexBatchPreTransformed(vertices, uvs, colors, glyph_count * 4);
-    }
-    gGL.end();
-
+    render_queued_glyphs();
 
     if (right_x)
     {
@@ -402,10 +412,8 @@ S32 LLFontGL::render(const LLWString &wstr, S32 begin_offset, F32 x, F32 y, cons
 
     if (draw_ellipses)
     {
-
         // recursively render ellipses at end of string
         // we've already reserved enough room
-        gGL.pushUIMatrix();
         static LLWString elipses_wstr(utf8string_to_wstring(std::string("...")));
         render(elipses_wstr,
                 0,
@@ -418,7 +426,6 @@ S32 LLFontGL::render(const LLWString &wstr, S32 begin_offset, F32 x, F32 y, cons
                 right_x,
                 false,
                 use_color);
-        gGL.popUIMatrix();
     }
 
     gGL.popUIMatrix();
@@ -504,6 +511,7 @@ F32 LLFontGL::getWidthF32(const std::string& utf8text, S32 begin_offset, S32 max
 
 F32 LLFontGL::getWidthF32(const llwchar* wchars, S32 begin_offset, S32 max_chars, bool no_padding) const
 {
+    LL_PROFILE_ZONE_SCOPED_CATEGORY_UI;
     const S32 LAST_CHARACTER = LLFontFreetype::LAST_CHAR_FULL;
 
     F32 cur_x = 0;
@@ -1227,31 +1235,42 @@ LLFontGL &LLFontGL::operator=(const LLFontGL &source)
     return *this;
 }
 
-void LLFontGL::renderQuad(LLVector3* vertex_out, LLVector2* uv_out, LLColor4U* colors_out, const LLRectf& screen_rect, const LLRectf& uv_rect, const LLColor4U& color, F32 slant_amt) const
+void LLFontGL::renderTriangle(LLVector4a* vertex_out, LLVector2* uv_out, LLColor4U* colors_out, const LLRectf& screen_rect, const LLRectf& uv_rect, const LLColor4U& color, F32 slant_amt) const
 {
     S32 index = 0;
 
-    vertex_out[index] = LLVector3(screen_rect.mRight, screen_rect.mTop, 0.f);
-    uv_out[index] = LLVector2(uv_rect.mRight, uv_rect.mTop);
+    vertex_out[index].set(screen_rect.mRight, screen_rect.mTop, 0.f);
+    uv_out[index].set(uv_rect.mRight, uv_rect.mTop);
     colors_out[index] = color;
     index++;
 
-    vertex_out[index] = LLVector3(screen_rect.mLeft, screen_rect.mTop, 0.f);
-    uv_out[index] = LLVector2(uv_rect.mLeft, uv_rect.mTop);
+    vertex_out[index].set(screen_rect.mLeft, screen_rect.mTop, 0.f);
+    uv_out[index].set(uv_rect.mLeft, uv_rect.mTop);
     colors_out[index] = color;
     index++;
 
-    vertex_out[index] = LLVector3(screen_rect.mLeft, screen_rect.mBottom, 0.f);
-    uv_out[index] = LLVector2(uv_rect.mLeft, uv_rect.mBottom);
+    vertex_out[index].set(screen_rect.mLeft, screen_rect.mBottom, 0.f);
+    uv_out[index].set(uv_rect.mLeft, uv_rect.mBottom);
     colors_out[index] = color;
     index++;
 
-    vertex_out[index] = LLVector3(screen_rect.mRight, screen_rect.mBottom, 0.f);
-    uv_out[index] = LLVector2(uv_rect.mRight, uv_rect.mBottom);
+
+    vertex_out[index].set(screen_rect.mRight, screen_rect.mTop, 0.f);
+    uv_out[index].set(uv_rect.mRight, uv_rect.mTop);
+    colors_out[index] = color;
+    index++;
+
+    vertex_out[index].set(screen_rect.mLeft, screen_rect.mBottom, 0.f);
+    uv_out[index].set(uv_rect.mLeft, uv_rect.mBottom);
+    colors_out[index] = color;
+    index++;
+
+    vertex_out[index].set(screen_rect.mRight, screen_rect.mBottom, 0.f);
+    uv_out[index].set(uv_rect.mRight, uv_rect.mBottom);
     colors_out[index] = color;
 }
 
-void LLFontGL::drawGlyph(S32& glyph_count, LLVector3* vertex_out, LLVector2* uv_out, LLColor4U* colors_out, const LLRectf& screen_rect, const LLRectf& uv_rect, const LLColor4U& color, U8 style, ShadowType shadow, F32 drop_shadow_strength) const
+void LLFontGL::drawGlyph(U32& glyph_count, LLVector4a* vertex_out, LLVector2* uv_out, LLColor4U* colors_out, const LLRectf& screen_rect, const LLRectf& uv_rect, const LLColor4U& color, U8 style, ShadowType shadow, F32 drop_shadow_strength) const
 {
     F32 slant_offset;
     slant_offset = ((style & ITALIC) ? ( -mFontFreetype->getAscenderHeight() * 0.2f) : 0.f);
@@ -1265,7 +1284,7 @@ void LLFontGL::drawGlyph(S32& glyph_count, LLVector3* vertex_out, LLVector2* uv_
             LLRectf screen_rect_offset = screen_rect;
 
             screen_rect_offset.translate((F32)(pass * BOLD_OFFSET), 0.f);
-            renderQuad(&vertex_out[glyph_count * 4], &uv_out[glyph_count * 4], &colors_out[glyph_count * 4], screen_rect_offset, uv_rect, color, slant_offset);
+            renderTriangle(&vertex_out[glyph_count * 6], &uv_out[glyph_count * 6], &colors_out[glyph_count * 6], screen_rect_offset, uv_rect, color, slant_offset);
             glyph_count++;
         }
     }
@@ -1296,10 +1315,10 @@ void LLFontGL::drawGlyph(S32& glyph_count, LLVector3* vertex_out, LLVector2* uv_
                 break;
             }
 
-            renderQuad(&vertex_out[glyph_count * 4], &uv_out[glyph_count * 4], &colors_out[glyph_count * 4], screen_rect_offset, uv_rect, shadow_color, slant_offset);
+            renderTriangle(&vertex_out[glyph_count * 6], &uv_out[glyph_count * 6], &colors_out[glyph_count * 6], screen_rect_offset, uv_rect, shadow_color, slant_offset);
             glyph_count++;
         }
-        renderQuad(&vertex_out[glyph_count * 4], &uv_out[glyph_count * 4], &colors_out[glyph_count * 4], screen_rect, uv_rect, color, slant_offset);
+        renderTriangle(&vertex_out[glyph_count * 6], &uv_out[glyph_count * 6], &colors_out[glyph_count * 6], screen_rect, uv_rect, color, slant_offset);
         glyph_count++;
     }
     else if (shadow == DROP_SHADOW)
@@ -1308,14 +1327,14 @@ void LLFontGL::drawGlyph(S32& glyph_count, LLVector3* vertex_out, LLVector2* uv_
         shadow_color.mV[VALPHA] = U8(color.mV[VALPHA] * drop_shadow_strength);
         LLRectf screen_rect_shadow = screen_rect;
         screen_rect_shadow.translate(1.f, -1.f);
-        renderQuad(&vertex_out[glyph_count * 4], &uv_out[glyph_count * 4], &colors_out[glyph_count * 4], screen_rect_shadow, uv_rect, shadow_color, slant_offset);
+        renderTriangle(&vertex_out[glyph_count * 6], &uv_out[glyph_count * 6], &colors_out[glyph_count * 6], screen_rect_shadow, uv_rect, shadow_color, slant_offset);
         glyph_count++;
-        renderQuad(&vertex_out[glyph_count * 4], &uv_out[glyph_count * 4], &colors_out[glyph_count * 4], screen_rect, uv_rect, color, slant_offset);
+        renderTriangle(&vertex_out[glyph_count * 6], &uv_out[glyph_count * 6], &colors_out[glyph_count * 6], screen_rect, uv_rect, color, slant_offset);
         glyph_count++;
     }
     else // normal rendering
     {
-        renderQuad(&vertex_out[glyph_count * 4], &uv_out[glyph_count * 4], &colors_out[glyph_count * 4], screen_rect, uv_rect, color, slant_offset);
+        renderTriangle(&vertex_out[glyph_count * 6], &uv_out[glyph_count * 6], &colors_out[glyph_count * 6], screen_rect, uv_rect, color, slant_offset);
         glyph_count++;
     }
 }

@@ -28,8 +28,8 @@
 #include "llavatarappearancedefines.h"
 #include "indra_constants.h"
 
-const S32 LLAvatarAppearanceDefines::SCRATCH_TEX_WIDTH = 1024;
-const S32 LLAvatarAppearanceDefines::SCRATCH_TEX_HEIGHT = 1024;
+const S32 LLAvatarAppearanceDefines::SCRATCH_TEX_WIDTH = 2048;
+const S32 LLAvatarAppearanceDefines::SCRATCH_TEX_HEIGHT = 2048;
 
 using namespace LLAvatarAppearanceDefines;
 
@@ -260,7 +260,7 @@ ETextureIndex LLAvatarAppearanceDictionary::bakedToLocalTextureIndex(EBakedTextu
     return getBakedTexture(index)->mTextureIndex;
 }
 
-EBakedTextureIndex LLAvatarAppearanceDictionary::findBakedByRegionName(std::string name)
+EBakedTextureIndex LLAvatarAppearanceDictionary::findBakedByRegionName(const std::string& name) const
 {
     U8 index = 0;
     while (index < BAKED_NUM_INDICES)
@@ -277,7 +277,7 @@ EBakedTextureIndex LLAvatarAppearanceDictionary::findBakedByRegionName(std::stri
     return BAKED_NUM_INDICES;
 }
 
-EBakedTextureIndex LLAvatarAppearanceDictionary::findBakedByImageName(std::string name)
+EBakedTextureIndex LLAvatarAppearanceDictionary::findBakedByImageName(const std::string& name) const
 {
     U8 index = 0;
     while (index < BAKED_NUM_INDICES)
@@ -300,7 +300,8 @@ EBakedTextureIndex LLAvatarAppearanceDictionary::findBakedByImageName(std::strin
 
 LLWearableType::EType LLAvatarAppearanceDictionary::getTEWearableType(ETextureIndex index ) const
 {
-    return getTexture(index)->mWearableType;
+    auto* tex = getTexture(index);
+    return tex ? tex->mWearableType : LLWearableType::WT_INVALID;
 }
 
 // static

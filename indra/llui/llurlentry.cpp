@@ -435,8 +435,18 @@ bool LLUrlEntryInvalidSLURL::isSLURLvalid(const std::string &url) const
 LLUrlEntrySLURL::LLUrlEntrySLURL()
 {
     // see http://slurl.com/about.php for details on the SLURL format
-    mPattern = boost::regex("https?://(maps.secondlife.com|slurl.com)/secondlife/[^ /]+(/\\d+){0,3}(/?(\\?title|\\?img|\\?msg)=\\S*)?/?",
-                            boost::regex::perl|boost::regex::icase);
+    std::string pattern =
+        "("
+          "secondlife://(Agni|Aditi|Mitra|Damballah)/secondlife"
+          "|"
+          "https?://"
+          "("
+            "(maps.secondlife.com|slurl.com)/secondlife"
+            "|"
+            "util.(agni|aditi|mitra|damballah).lindenlab.com/region"
+          ")"
+        ")/[^/]+(/\\d+){0,3}(/?(\\?title|\\?img|\\?msg)=\\S*)?/?";
+    mPattern = boost::regex(pattern, boost::regex::perl|boost::regex::icase);
     mIcon = "Hand";
     mMenuName = "menu_url_slurl.xml";
     mTooltip = LLTrans::getString("TooltipSLURL");
@@ -446,6 +456,10 @@ std::string LLUrlEntrySLURL::getLabel(const std::string &url, const LLUrlLabelCa
 {
     //
     // we handle SLURLs in the following formats:
+    //   - https://util.agni.lindenlab.com/region/Place/X/Y/Z
+    //   - https://util.agni.lindenlab.com/region/Place/X/Y
+    //   - https://util.agni.lindenlab.com/region/Place/X
+    //   - https://util.agni.lindenlab.com/region/Place
     //   - http://slurl.com/secondlife/Place/X/Y/Z
     //   - http://slurl.com/secondlife/Place/X/Y
     //   - http://slurl.com/secondlife/Place/X
@@ -600,15 +614,15 @@ void LLUrlEntryAgent::callObservers(const std::string &id,
 void LLUrlEntryAgent::onAvatarNameCache(const LLUUID& id,
                                         const LLAvatarName& av_name)
 {
-    avatar_name_cache_connection_map_t::iterator it = mAvatarNameCacheConnections.find(id);
-    if (it != mAvatarNameCacheConnections.end())
+    auto range = mAvatarNameCacheConnections.equal_range(id);
+    for (avatar_name_cache_connection_map_t::iterator it = range.first; it != range.second; ++it)
     {
         if (it->second.connected())
         {
             it->second.disconnect();
         }
-        mAvatarNameCacheConnections.erase(it);
     }
+    mAvatarNameCacheConnections.erase(range.first, range.second);
 
     std::string label = av_name.getCompleteName();
 
@@ -616,7 +630,7 @@ void LLUrlEntryAgent::onAvatarNameCache(const LLUUID& id,
     callObservers(id.asString(), label, mIcon);
 }
 
-LLUUID  LLUrlEntryAgent::getID(const std::string &string) const
+LLUUID LLUrlEntryAgent::getID(const std::string &string) const
 {
     return LLUUID(getIDStringFromUrl(string));
 }
@@ -695,16 +709,7 @@ std::string LLUrlEntryAgent::getLabel(const std::string &url, const LLUrlLabelCa
     }
     else
     {
-        avatar_name_cache_connection_map_t::iterator it = mAvatarNameCacheConnections.find(agent_id);
-        if (it != mAvatarNameCacheConnections.end())
-        {
-            if (it->second.connected())
-            {
-                it->second.disconnect();
-            }
-            mAvatarNameCacheConnections.erase(it);
-        }
-        mAvatarNameCacheConnections[agent_id] = LLAvatarNameCache::get(agent_id, boost::bind(&LLUrlEntryAgent::onAvatarNameCache, this, _1, _2));
+        mAvatarNameCacheConnections.emplace(agent_id, LLAvatarNameCache::get(agent_id, boost::bind(&LLUrlEntryAgent::onAvatarNameCache, this, _1, _2)));
 
         addObserver(agent_id_string, url, cb);
         return LLTrans::getString("LoadingData");
@@ -770,17 +775,17 @@ LLUrlEntryAgentName::LLUrlEntryAgentName()
 {}
 
 void LLUrlEntryAgentName::onAvatarNameCache(const LLUUID& id,
-                                        const LLAvatarName& av_name)
+                                            const LLAvatarName& av_name)
 {
-    avatar_name_cache_connection_map_t::iterator it = mAvatarNameCacheConnections.find(id);
-    if (it != mAvatarNameCacheConnections.end())
+    auto range = mAvatarNameCacheConnections.equal_range(id);
+    for (avatar_name_cache_connection_map_t::iterator it = range.first; it != range.second; ++it)
     {
         if (it->second.connected())
         {
             it->second.disconnect();
         }
-        mAvatarNameCacheConnections.erase(it);
     }
+    mAvatarNameCacheConnections.erase(range.first, range.second);
 
     std::string label = getName(av_name);
     // received the agent name from the server - tell our observers
@@ -815,16 +820,7 @@ std::string LLUrlEntryAgentName::getLabel(const std::string &url, const LLUrlLab
     }
     else
     {
-        avatar_name_cache_connection_map_t::iterator it = mAvatarNameCacheConnections.find(agent_id);
-        if (it != mAvatarNameCacheConnections.end())
-        {
-            if (it->second.connected())
-            {
-                it->second.disconnect();
-            }
-            mAvatarNameCacheConnections.erase(it);
-        }
-        mAvatarNameCacheConnections[agent_id] = LLAvatarNameCache::get(agent_id, boost::bind(&LLUrlEntryAgentName::onAvatarNameCache, this, _1, _2));
+        mAvatarNameCacheConnections.emplace(agent_id, LLAvatarNameCache::get(agent_id, boost::bind(&LLUrlEntryAgentName::onAvatarNameCache, this, _1, _2)));
 
         addObserver(agent_id_string, url, cb);
         return LLTrans::getString("LoadingData");
@@ -1701,6 +1697,7 @@ void LLUrlEntryKeybinding::initLocalization()
     initLocalizationFromFile("control_table_contents_camera.xml");
     initLocalizationFromFile("control_table_contents_editing.xml");
     initLocalizationFromFile("control_table_contents_media.xml");
+    initLocalizationFromFile("control_table_contents_game_control.xml");
 }
 
 void LLUrlEntryKeybinding::initLocalizationFromFile(const std::string& filename)

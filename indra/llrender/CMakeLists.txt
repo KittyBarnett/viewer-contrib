@@ -10,19 +10,18 @@ include(LLImage)
 include(LLWindow)
 
 set(llrender_SOURCE_FILES
-    llatmosphere.cpp
     llcubemap.cpp
     llcubemaparray.cpp
     llfontbitmapcache.cpp
     llfontfreetype.cpp
     llfontfreetypesvg.cpp
     llfontgl.cpp
+    llfontvertexbuffer.cpp
     llfontregistry.cpp
     llgl.cpp
     llglslshader.cpp
     llgltexture.cpp
     llimagegl.cpp
-    llpostprocess.cpp
     llrender.cpp
     llrender2dutils.cpp
     llrendernavprim.cpp
@@ -39,10 +38,10 @@ set(llrender_SOURCE_FILES
 set(llrender_HEADER_FILES
     CMakeLists.txt
 
-    llatmosphere.h
     llcubemap.h
     llcubemaparray.h
     llfontgl.h
+    llfontvertexbuffer.h
     llfontfreetype.h
     llfontfreetypesvg.h
     llfontbitmapcache.h
@@ -54,7 +53,6 @@ set(llrender_HEADER_FILES
     llgltexture.h
     llgltypes.h
     llimagegl.h
-    llpostprocess.h
     llrender.h
     llrender2dutils.h
     llrendernavprim.h
@@ -74,6 +72,7 @@ if (BUILD_HEADLESS)
   add_library (llrenderheadless
     ${llrender_SOURCE_FILES}
     )
+  target_include_directories( llrenderheadless  INTERFACE   ${CMAKE_CURRENT_SOURCE_DIR})
 
   set_property(TARGET llrenderheadless
     PROPERTY COMPILE_DEFINITIONS LL_MESA=1 LL_MESA_HEADLESS=1
@@ -83,9 +82,11 @@ if (BUILD_HEADLESS)
           llcommon
           llimage
           llmath
-          llrender
           llxml
           llfilesystem
+          llwindowheadless
+          ll::freetype
+          OpenGL::GL
           )
 endif (BUILD_HEADLESS)
 
@@ -103,6 +104,5 @@ target_link_libraries(llrender
         llwindow
         ll::freetype
         OpenGL::GL
-        OpenGL::GLU
         )
 
